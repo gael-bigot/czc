@@ -1,4 +1,5 @@
 use logos::Logos;
+use ariadne::{Color, Label, Report, ReportKind, Source};
 
 
 pub struct Token {
@@ -13,8 +14,6 @@ impl Token {
 }
 
 
-// Token enum for logos lexer
-// The actual base token object for the compiler is Token
 #[derive(Logos, Debug, Clone)]
 #[logos(skip r"[ \n\t]+")]
 #[logos(skip r"//.*\n")]
@@ -153,14 +152,25 @@ pub enum TokenType {
 }
 
 
-
-pub fn lex(input: &str) -> Vec<Token> {
+pub fn lex(input: &str, file_name: &str) -> (Vec<Token>, u32) {
+    let mut errors = 0;
     let mut lex = TokenType::lexer(input);
     let mut tokens = Vec::new();
     while let Some(token) = lex.next() {
+        let lexeme = lex.slice().to_string();
         if let Ok(token_type) = token {
-            tokens.push(Token::new(token_type, lex.slice().to_string()));
+            tokens.push(Token::new(token_type, lexeme));
+        } else {
+            let error_span = (file_name, lex.span().start..lex.span().end);
+            let _ = Report::build(ReportKind::Error, error_span.clone())
+                .with_message("Lexer error")
+                .with_label(Label::new(error_span)
+                    .with_message(format!("Unknown token '{}'", lexeme))
+                    .with_color(Color::Red))
+                .finish()
+                .print((file_name, Source::from(input)));
+            errors += 1;
         }
     }
-    tokens
+    (tokens, errors)
 }

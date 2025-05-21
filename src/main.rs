@@ -2,8 +2,11 @@ use std::env;
 mod lexer;
 
 
-fn run(input: &str) {
-    let tokens = lexer::lex(input);
+fn run(input: &str, file_name: &str) {
+    let (tokens, errors) = lexer::lex(input, file_name);
+    if errors > 0 {
+        panic!("Lexing failed with {} errors", errors);
+    }
     for token in tokens {
         println!("{:?}: {}", token.kind, token.lexeme);
     }
@@ -11,7 +14,7 @@ fn run(input: &str) {
 
 fn from_file(path: &str) {
     let contents = std::fs::read_to_string(path).expect("Could not read file.");
-    run(&contents);
+    run(&contents, path);
 }
 
 
