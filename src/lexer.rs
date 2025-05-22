@@ -1,6 +1,5 @@
-use logos::Logos;
 use ariadne::{Color, Label, Report, ReportKind, Source};
-
+use logos::Logos;
 
 pub struct Token {
     pub kind: TokenType,
@@ -9,151 +8,171 @@ pub struct Token {
 
 impl Token {
     pub fn new(kind: TokenType, lexeme: String) -> Self {
-        Self { kind, lexeme }
+        Self { kind, lexeme}
     }
 }
 
 
 #[derive(Logos, Debug, Clone)]
-#[logos(skip r"[ \n\t]+")]
+#[logos(skip r"[\t\n ]+")]
 #[logos(skip r"//.*\n")]
 pub enum TokenType {
-    // Keywords
-    #[token("func")]
-    Func,
-    #[token("return")]
-    Return,
-    #[token("let")]
-    Let,
-    #[token("local")]
-    Local,
-    #[token("const")]
-    Const,
-    #[token("struct")]
-    Struct,
-    #[token("if")]
-    If,
-    #[token("else")]
-    Else,
-    #[token("with_attr")]
-    WithAttr,
-    #[token("alloc_locals")]
-    AllocLocals,
-    #[token("from")]
-    From,
-    #[token("import")]
-    Import,
 
-    // Builtins
-    #[token("%builtins")]
-    Builtins,
-    #[token("output")]
-    Output,
-    #[token("pedersen")]
-    Pedersen,
-    #[token("range_check")]
-    RangeCheck,
-    #[token("ecdsa")]
-    Ecdsa,
-    #[token("bitwise")]
-    Bitwise,
+    #[regex("[0-9]+")]
+    Int,
 
-    // Punctuation
-    #[token(";")]
-    Semicolon,
-    #[token("(")]
-    LeftParen,
-    #[token(")")]
-    RightParen,
-    #[token("{")]
-    LeftBrace,
-    #[token("}")]
-    RightBrace,
-    #[token("[")]
-    LeftBracket,
-    #[token("]")]
-    RightBracket,
+    #[regex(r"0x[0-9a-fA-F]+")]
+    HexInt,
+    #[regex(r"[a-zA-Z_][a-zA-Z_0-9]*")]
+    Identifier,
+    #[regex(r#"".""#)]
+    String,
+    #[regex(r"'.'")]
+    ShortString,
+
+    #[token("++")]
+    PlusPlus,
+    #[token("==")]
+    DoubleEq,
+    #[token("**")]
+    DoubleStar,
+    #[token("!=")]
+    Neq,
+    #[token("->")]
+    Arrow,
+    #[token("@")]
+    At,
+
     #[token(",")]
     Comma,
-    #[token(".")]
-    Dot,
+
+    #[token(":")]
+    Colon,
+
+    #[token("felt")]
+    Felt,
+    #[token("codeoffset")]
+    CodeOffset,
+
+    #[token("*")]
+    Star,
+    #[token("(")]
+    LParen,
+    #[token(")")]
+    RParen,
+    
     #[token("=")]
     Equal,
+
     #[token("+")]
     Plus,
     #[token("-")]
     Minus,
-    #[token("*")]
-    Star,
     #[token("/")]
     Slash,
+
     #[token("&")]
     Ampersand,
-    #[token(":")]
-    Colon,
-    #[token("->")]
-    Arrow,
-    #[token("!=")]
-    NotEqual,
-    #[token("==")]
-    EqualEqual,
-    #[token(">")]
-    Greater,
-    #[token("<")]
-    Less,
-    #[token(">=")]
-    GreaterEqual,
-    #[token("<=")]
-    LessEqual,
-    #[token("++")]
-    PlusPlus,
-    #[token("%")]
-    Percent,
+    #[token("new")]
+    New,
 
-    // Literals
-    #[regex(r"[0-9]+")]
-    Number,
-    #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*")]
-    Identifier,
+    #[token(".")]
+    Dot,
 
-    // Special tokens
-    #[token("%{")]
-    HintStart,
-    #[token("%}")]
-    HintEnd,
+    //Atom
+    #[token("nondet")]
+    NonDet,
+    #[token("[")]
+    LBracket,
+    #[token("]")]
+    RBracket,
+
+    //Reg
     #[token("ap")]
     Ap,
     #[token("fp")]
     Fp,
-    #[token("felt")]
-    Felt,
-    #[token("cast")]
-    Cast,
-    #[token("assert")]
-    Assert,
-    #[token("get_fp_and_pc")]
-    GetFpAndPc,
-    #[token("alloc")]
-    Alloc,
-    #[token("jmp")]
-    Jmp,
-    #[token("abs")]
-    Abs,
+
+    #[token("and")]
+    And,
+    
+
+    #[token("local")]
+    Local,
+
+    #[token("ret")]
+    Ret,
+
+    //Instructions
+
+    #[token("call")]
+    Call,
     #[token("rel")]
     Rel,
-    #[token("case")]
-    Case,
-    #[token("true")]
-    True,
-    #[token("false")]
-    False,
-    #[token("nil")]
-    Nil,
+    #[token("abs")]
+    Abs,
+    #[token("jmp")]
+    Jmp,
+    #[token("if")]
+    If,
+    #[token("+=")]
+    PlusEq,
+    #[token("dw")]
+    Dw,
+    #[token("{")]
+    LBrace,
+    #[token("}")]
+    RBrace,
+
+    // Import statement
+    #[token("import")]
+    Import,
+    #[token("from")]
+    From,
+    #[token("as")]
+    As,
+
+    // Function/Namespace/Struct definition.
+    #[token("func")]
+    Func,
+    #[token("with")]
+    With,
+    #[token("struct")]
+    Struct,
+    #[token("namespace")]
+    Namespace,
+    #[token("with_attr")]
+    WithAttr,
+
+    // Cairo file
+    // #[token("\n")]
+    // Newline,
+
+
+    // Code elements
+    #[token(";")]
+    Semicolon,
+    #[token("const")]
+    Const,
+    #[token("let")]
+    Let,
+    #[token("tempvar")]
+    TempVar,
+    #[token("assert")]
+    Assert,
+    #[token("static_assert")]
+    StaticAssert,
+    #[token("return")]
+    Return,
+    #[token("using")]
+    Using,
+    #[token("alloc_locals")]
+    AllocLocals,
+
 }
 
-
 pub fn lex(input: &str, file_name: &str) -> (Vec<Token>, u32) {
-    let mut errors = 0;
+    let mut error_counter = 0;
     let mut lex = TokenType::lexer(input);
     let mut tokens = Vec::new();
     while let Some(token) = lex.next() {
@@ -169,8 +188,8 @@ pub fn lex(input: &str, file_name: &str) -> (Vec<Token>, u32) {
                     .with_color(Color::Red))
                 .finish()
                 .print((file_name, Source::from(input)));
-            errors += 1;
+            error_counter += 1;
         }
     }
-    (tokens, errors)
+    (tokens, error_counter)
 }

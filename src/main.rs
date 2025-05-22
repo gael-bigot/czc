@@ -1,5 +1,7 @@
 use std::env;
+mod ast;
 mod lexer;
+mod parser;
 
 
 fn run(input: &str, file_name: &str) {
@@ -16,7 +18,6 @@ fn from_file(path: &str) {
     let contents = std::fs::read_to_string(path).expect("Could not read file.");
     run(&contents, path);
 }
-
 
 fn main(){
     let args: Vec<String> = env::args().collect();
