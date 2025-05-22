@@ -1,4 +1,5 @@
 use std::env;
+use chumsky::prelude::*;
 mod ast;
 mod lexer;
 mod parser;
@@ -9,9 +10,8 @@ fn run(input: &str, file_name: &str) {
     if errors > 0 {
         panic!("Lexing failed with {} errors", errors);
     }
-    for token in tokens {
-        println!("{:?}: {}", token.kind, token.lexeme);
-    }
+    let expr = parser::parser().parse(&tokens);
+    println!("{:?}", expr);
 }
 
 fn from_file(path: &str) {

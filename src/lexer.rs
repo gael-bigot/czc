@@ -1,34 +1,23 @@
 use ariadne::{Color, Label, Report, ReportKind, Source};
 use logos::Logos;
 
-pub struct Token {
-    pub kind: TokenType,
-    pub lexeme: String,
-}
 
-impl Token {
-    pub fn new(kind: TokenType, lexeme: String) -> Self {
-        Self { kind, lexeme}
-    }
-}
-
-
-#[derive(Logos, Debug, Clone)]
+#[derive(Logos, Debug, Clone, PartialEq, Eq)]
 #[logos(skip r"[\t\n ]+")]
 #[logos(skip r"//.*\n")]
-pub enum TokenType {
+pub enum Token {
 
-    #[regex("[0-9]+")]
-    Int,
+    #[regex("[0-9]+", |lex| lex.slice().parse().ok())]
+    Int(u64),
 
-    #[regex(r"0x[0-9a-fA-F]+")]
-    HexInt,
-    #[regex(r"[a-zA-Z_][a-zA-Z_0-9]*")]
-    Identifier,
-    #[regex(r#"".""#)]
-    String,
-    #[regex(r"'.'")]
-    ShortString,
+    #[regex(r"0x[0-9a-fA-F]+", |lex| u64::from_str_radix(&lex.slice()[2..], 16).ok())]
+    HexInt(u64),
+    #[regex(r"[a-zA-Z_][a-zA-Z_0-9]*", |lex| Some(lex.slice().to_string()))]
+    Identifier(String),
+    #[regex(r#"".""#, |lex| Some(lex.slice().to_string()))]
+    String(String),
+    #[regex(r"'.'", |lex| Some(lex.slice().to_string()))]
+    ShortString(String),
 
     #[token("++")]
     PlusPlus,
@@ -86,6 +75,8 @@ pub enum TokenType {
     LBracket,
     #[token("]")]
     RBracket,
+    #[token("cast")]
+    Cast,
 
     //Reg
     #[token("ap")]
@@ -171,14 +162,17 @@ pub enum TokenType {
 
 }
 
+
+
+
 pub fn lex(input: &str, file_name: &str) -> (Vec<Token>, u32) {
     let mut error_counter = 0;
-    let mut lex = TokenType::lexer(input);
+    let mut lex = Token::lexer(input);
     let mut tokens = Vec::new();
     while let Some(token) = lex.next() {
         let lexeme = lex.slice().to_string();
-        if let Ok(token_type) = token {
-            tokens.push(Token::new(token_type, lexeme));
+        if let Ok(token) = token {
+            tokens.push(token);
         } else {
             let error_span = (file_name, lex.span().start..lex.span().end);
             let _ = Report::build(ReportKind::Error, error_span.clone())
