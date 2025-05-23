@@ -1,6 +1,6 @@
 use crate::ast::*;
 use crate::lexer::Token;
-use ariadne::{Color, Label, Report, ReportKind, Source};
+
 
 
 
@@ -54,14 +54,7 @@ impl Parser {
             self.advance()
         } else {
             let previous_token_span = self.previous().span;
-            let error_span = (self.file_name.clone(), previous_token_span.0..previous_token_span.1);
-            let _ = Report::build(ReportKind::Error, error_span.clone())
-                .with_message("Syntax error")
-                .with_label(Label::new(error_span)
-                    .with_message(message)
-                    .with_color(Color::Red))
-                .finish()
-                .print((self.file_name.clone(), Source::from(self.source.clone())));
+            crate::error::report_error(self.file_name.clone(), self.source.clone(), previous_token_span, "Parser error".to_string(), message.to_string());
             Token {
                 token_type: crate::lexer::TokenType::Error,
                 lexeme: "".to_string(),
@@ -78,19 +71,47 @@ impl Parser {
         exprs
     }
 
+    fn identifier(&mut self) -> Identifier {
+        let token = self.consume(crate::lexer::TokenType::Identifier, "Expected identifier");
+        Identifier { token }
+    }
+
     fn expression(&mut self) -> Expr {
         self.sum()
     }
 
-    /*
-    fn arglist_list(&mut self) -> Vec<ExprAssignment> {
-        let mut args = Vec::new();
-        while !self.check(crate::lexer::TokenType::RParen) {
-            args.push(self.expression());
+
+    fn expr_assignment(&mut self) -> ExprAssignment {
+        let expr = self.expression();
+        if let ExprType::Identifier = expr.expr_type {
+            let ident = expr.ident.clone().unwrap();
+            if self.check(crate::lexer::TokenType::Equal) {
+                self.advance();
+                let expr = self.expression();
+                ExprAssignment::Assign(ident.clone(), expr)
+            } else {
+                ExprAssignment::Expr(expr)
+            }
+        } else {
+            ExprAssignment::Expr(expr)
         }
+    }
+
+    
+    fn paren_arglist(&mut self) -> Vec<ExprAssignment> {
+        let mut args = Vec::new();
+        self.consume(crate::lexer::TokenType::LParen, "Expected '('");
+        while !self.check(crate::lexer::TokenType::RParen) {
+            args.push(self.expr_assignment());
+            if !self.check(crate::lexer::TokenType::Comma) {
+                break;
+            }
+            self.advance();
+        }
+        self.consume(crate::lexer::TokenType::RParen, "Expected ')'");
         args
     }
-    */
+    
 
     fn sum(&mut self) -> Expr {
         let mut expr = self.product();
@@ -151,7 +172,7 @@ impl Parser {
     }
 
     fn pow(&mut self) -> Expr {
-        let mut expr = self.atom();
+        let mut expr = self.bool_and();
         while self.check(crate::lexer::TokenType::DoubleStar) {
             self.advance();
             let right = self.expression();
@@ -160,44 +181,87 @@ impl Parser {
         expr
     }
 
-    fn atom(&mut self) -> Expr {
-        let token = self.advance();
-        match token.token_type {
-            crate::lexer::TokenType::Int => {
-                Expr::new_terminal(ExprType::IntegerLiteral, token)
+    fn bool_and(&mut self) -> Expr {
+        let mut expr = self.bool_atom();
+        while self.check(crate::lexer::TokenType::And) {
+            self.advance();
+            let right = self.bool_atom();
+            expr = Expr::new_binary(ExprType::And, expr, right);
+        }
+        expr
+    }
+
+
+    fn bool_atom(&mut self) -> Expr {
+        let expr = self.atom();
+        let op = self.peek();
+        match op.token_type {
+            crate::lexer::TokenType::DoubleEq => {
+                self.advance();
+                let right = self.atom();
+                Expr::new_binary(ExprType::Eq, expr, right)
             }
-            crate::lexer::TokenType::Identifier => {
-                Expr::new_terminal(ExprType::Identifier, token)
+            crate::lexer::TokenType::Neq => {
+                self.advance();
+                let right = self.atom();
+                Expr::new_binary(ExprType::Neq, expr, right)
             }
-            crate::lexer::TokenType::HexInt => {
-                Expr::new_terminal(ExprType::IntegerLiteral, token)
-            }
-            crate::lexer::TokenType::ShortString => {
-                Expr::new_terminal(ExprType::IntegerLiteral, token)
-            }
-            crate::lexer::TokenType::NonDet => {
-                let hint = self.consume(crate::lexer::TokenType::NonDet, "Expected hint after nondet");
-                Expr::new_terminal(ExprType::Hint, hint)
-            }
-            crate::lexer::TokenType::Ap | crate::lexer::TokenType::Fp => {
-                Expr::new_terminal(ExprType::Register, token)
-            }
-            // TODO function call
-            crate::lexer::TokenType::LBracket => {
-                let expr = self.expression();
-                self.consume(crate::lexer::TokenType::RBracket, "Expected ']' after dereferencing");
-                Expr::new_unary(ExprType::Deref, expr)
-            }
-            crate::lexer::TokenType::LParen => {
-                let expr = self.expression();
-                self.consume(crate::lexer::TokenType::RParen, "Expected ')' after expression");
-                expr
-            }
-            // TODO subscript
-            // TODO dot
-            // TODO cast
-            // TODO arglist
-            _ => todo!(),
+            _ => expr,
         }
     }
+
+
+    fn atom(&mut self) -> Expr {
+        let token = self.peek();
+        if self.check(crate::lexer::TokenType::LParen) {
+            let args = self.paren_arglist();
+            Expr::new_tuple_or_paren(args)
+        } else {
+            self.advance();
+            match token.token_type {
+                crate::lexer::TokenType::Int => {
+                    Expr::new_terminal(ExprType::IntegerLiteral, token)
+                }
+                crate::lexer::TokenType::Identifier => {
+                    if self.check(crate::lexer::TokenType::LParen) {
+                        let args = self.paren_arglist();
+                        Expr::new_function_call(token.lexeme, args)
+                    } else if self.check(crate::lexer::TokenType::LBracket) {
+                        self.advance();
+                        let expr = self.expression();
+                        self.consume(crate::lexer::TokenType::RBracket, "Expected ']' after expression");
+                        Expr::new_unary(ExprType::Subscript, expr)
+                    } else {
+                        Expr::new_identifier(Identifier { token })
+                    }
+                }
+                crate::lexer::TokenType::HexInt => {
+                    Expr::new_terminal(ExprType::IntegerLiteral, token)
+                }
+                crate::lexer::TokenType::ShortString => {
+                    Expr::new_terminal(ExprType::IntegerLiteral, token)
+                }
+                crate::lexer::TokenType::NonDet => {
+                    let hint = self.consume(crate::lexer::TokenType::NonDet, "Expected hint after nondet");
+                    Expr::new_terminal(ExprType::Hint, hint)
+                }
+                crate::lexer::TokenType::Ap | crate::lexer::TokenType::Fp => {
+                    Expr::new_terminal(ExprType::Register, token)
+                }
+                crate::lexer::TokenType::LBracket => {
+                    let expr = self.expression();
+                    self.consume(crate::lexer::TokenType::RBracket, "Expected ']' after dereferencing");
+                    Expr::new_unary(ExprType::Deref, expr)
+                }
+                // TODO cast when we have types
+                _ => {
+                    crate::error::report_error(self.file_name.clone(), self.source.clone(), token.span, "Parser error".to_string(), format!("Expected expression, got {:?}", token.lexeme));
+                    self.current -= 1;
+                    Expr::new_error()
+                }
+            }
+        }
+    }
+
+    
 }

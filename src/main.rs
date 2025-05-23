@@ -2,6 +2,7 @@ use std::env;
 mod ast;
 mod lexer;
 mod parser;
+mod error;
 
 extern crate ebnf;
 
