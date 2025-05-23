@@ -56,7 +56,7 @@ impl Parser {
             let previous_token_span = self.previous().span;
             let error_span = (self.file_name.clone(), previous_token_span.0..previous_token_span.1);
             let _ = Report::build(ReportKind::Error, error_span.clone())
-                .with_message("Parser error")
+                .with_message("Syntax error")
                 .with_label(Label::new(error_span)
                     .with_message(message)
                     .with_color(Color::Red))
@@ -65,7 +65,7 @@ impl Parser {
             Token {
                 token_type: crate::lexer::TokenType::Error,
                 lexeme: "".to_string(),
-                span: (0, 0),
+                span: (previous_token_span.0, previous_token_span.0),
             }
         }
     }
@@ -79,10 +79,86 @@ impl Parser {
     }
 
     fn expression(&mut self) -> Expr {
-        self.atom()
+        self.sum()
     }
 
+    /*
+    fn arglist_list(&mut self) -> Vec<ExprAssignment> {
+        let mut args = Vec::new();
+        while !self.check(crate::lexer::TokenType::RParen) {
+            args.push(self.expression());
+        }
+        args
+    }
+    */
 
+    fn sum(&mut self) -> Expr {
+        let mut expr = self.product();
+        while self.check(crate::lexer::TokenType::Plus) || self.check(crate::lexer::TokenType::Minus) {
+            let operator = self.advance();
+            let right = self.product();
+            match operator.token_type {
+                crate::lexer::TokenType::Plus => {
+                    expr = Expr::new_binary(ExprType::Add, expr, right);
+                }
+                crate::lexer::TokenType::Minus => {
+                    expr = Expr::new_binary(ExprType::Sub, expr, right);
+                }
+                _ => unreachable!(),
+            }
+        }
+        expr
+    }
+
+    fn product(&mut self) -> Expr {
+        let mut expr = self.unary();
+        while self.check(crate::lexer::TokenType::Star) || self.check(crate::lexer::TokenType::Slash) {
+            let operator = self.advance();
+            let right = self.expression();
+            match operator.token_type {
+                crate::lexer::TokenType::Star => {
+                    expr = Expr::new_binary(ExprType::Mul, expr, right);
+                }
+                crate::lexer::TokenType::Slash => {
+                    expr = Expr::new_binary(ExprType::Div, expr, right);
+                }
+                _ => unreachable!(),
+            }
+        }
+        expr
+    }
+
+    fn unary(&mut self) -> Expr {
+        let next = self.peek();
+        match next.token_type {
+            crate::lexer::TokenType::Ampersand => {
+                self.advance();
+                let right = self.unary();
+                Expr::new_unary(ExprType::AddressOf, right)
+            }
+            crate::lexer::TokenType::Minus => {
+                self.advance();
+                let right = self.unary();
+                Expr::new_unary(ExprType::Neg, right)
+            }
+            crate::lexer::TokenType::New => {
+                self.advance();
+                let right = self.unary();
+                Expr::new_unary(ExprType::New, right)
+            }
+            _ => self.pow(),
+        }
+    }
+
+    fn pow(&mut self) -> Expr {
+        let mut expr = self.atom();
+        while self.check(crate::lexer::TokenType::DoubleStar) {
+            self.advance();
+            let right = self.expression();
+            expr = Expr::new_binary(ExprType::Pow, expr, right);
+        }
+        expr
+    }
 
     fn atom(&mut self) -> Expr {
         let token = self.advance();
@@ -111,6 +187,11 @@ impl Parser {
                 let expr = self.expression();
                 self.consume(crate::lexer::TokenType::RBracket, "Expected ']' after dereferencing");
                 Expr::new_unary(ExprType::Deref, expr)
+            }
+            crate::lexer::TokenType::LParen => {
+                let expr = self.expression();
+                self.consume(crate::lexer::TokenType::RParen, "Expected ')' after expression");
+                expr
             }
             // TODO subscript
             // TODO dot
