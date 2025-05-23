@@ -47,6 +47,10 @@ impl Parser {
         self.tokens[self.current].clone()
     }
 
+    fn peekpeek(&mut self) -> crate::lexer::Token {
+        self.tokens[self.current + 1].clone()
+    }
+
     fn previous(&mut self) -> crate::lexer::Token {
         self.tokens[self.current - 1].clone()
     }
@@ -79,7 +83,7 @@ impl Parser {
 
     fn named_type(&mut self) -> Type {
         if self.peek().token_type == crate::lexer::TokenType::Identifier {
-            if self.peek().token_type == crate::lexer::TokenType::Colon {
+            if self.peekpeek().token_type == crate::lexer::TokenType::Colon {
                 let ident = self.identifier();
                 self.consume(crate::lexer::TokenType::Colon, "");
                 let type_ = self.type_();
@@ -105,12 +109,31 @@ impl Parser {
         }
     }
 
+    fn paren_type_list(&mut self) -> Vec<Type> {
+        let mut args = Vec::new();
+        self.consume(crate::lexer::TokenType::LParen, "Expected '('");
+        while !self.check(crate::lexer::TokenType::RParen) {
+            args.push(self.named_type());
+            if !self.check(crate::lexer::TokenType::Comma) {
+                break;
+            }
+            self.advance();
+        }
+        self.consume(crate::lexer::TokenType::RParen, "Expected ')'");
+        args
+    }
+
 
     fn type_atom(&mut self) -> Type {
-        match self.advance().token_type {
+        let token = self.advance();
+        match token.token_type {
             crate::lexer::TokenType::Felt => Type::Felt,
             crate::lexer::TokenType::CodeOffset => Type::CodeOffset,
-            crate::lexer::TokenType::Identifier => Type::Struct(self.identifier()),
+            crate::lexer::TokenType::Identifier => Type::Struct(Identifier { token }),
+            crate::lexer::TokenType::LParen => {
+                let types = self.paren_type_list();
+                Type::Tuple(types)
+            }
             _ => {
                 crate::error::report_error(self.file_name.clone(), self.source.clone(), self.peek().span, "Syntax error".to_string(), format!("Expected type, got {:?}", self.peek().lexeme));
                 Type::Error
