@@ -51,7 +51,8 @@ pub struct Expr {
     pub left: Option<Box<Expr>>,
     pub right: Option<Box<Expr>>,
     pub type_arg: Option<Type>,
-    pub args: Vec<ExprAssignment>,
+    pub paren_args: Vec<ExprAssignment>,
+    pub brace_args: Vec<ExprAssignment>,
 }
 
 
@@ -104,7 +105,8 @@ impl Expr {
             left: None,
             right: None,
             type_arg: None,
-            args: vec![],
+            paren_args: vec![],
+            brace_args: vec![],
         }
     }
     pub fn new_identifier(ident: Identifier) -> Self {
@@ -115,7 +117,8 @@ impl Expr {
             left: None,
             right: None,
             type_arg: None,
-            args: vec![],
+            paren_args: vec![],
+            brace_args: vec![],
         }
     }
 
@@ -127,7 +130,8 @@ impl Expr {
             left: None,
             right: None,
             type_arg: None,
-            args: vec![],
+            paren_args: vec![],
+            brace_args: vec![],
         }
     }
 
@@ -139,7 +143,8 @@ impl Expr {
             left: Some(Box::new(child)),
             right: None,
             type_arg: None,
-            args: vec![],
+            paren_args: vec![],
+            brace_args: vec![],
         }
     }
 
@@ -151,19 +156,21 @@ impl Expr {
             left: Some(Box::new(left)),
             right: Some(Box::new(right)),
             type_arg: None,
-            args: vec![],
+            paren_args: vec![],
+            brace_args: vec![],
         }
     }
 
-    pub fn new_function_call(name: String, args: Vec<ExprAssignment>) -> Self {
+    pub fn new_function_call(name: Identifier, paren_args: Vec<ExprAssignment>, brace_args: Vec<ExprAssignment>) -> Self {
         Self {
             token: None,
-            ident: None,
+            ident: Some(name),
             expr_type: ExprType::FunctionCall,
             left: None,
             right: None,
             type_arg: None,
-            args,
+            paren_args,
+            brace_args,
         }
     }
 
@@ -175,7 +182,8 @@ impl Expr {
             left: None,
             right: None,
             type_arg: None,
-            args,
+            paren_args: vec![],
+            brace_args: vec![],
         }
     }
 
@@ -187,7 +195,8 @@ impl Expr {
             left: Some(Box::new(child)),
             right: None,
             type_arg: Some(type_arg),
-            args: vec![],
+            paren_args: vec![],
+            brace_args: vec![],
         }
     }
 }
@@ -230,11 +239,20 @@ impl Instruction{
         }
     }
 
-    pub fn new_jmp(instruction_type: InstructionType, ident: Identifier, increment_ap: bool) -> Self {
+    pub fn new_jmp_label(instruction_type: InstructionType, ident: Identifier, increment_ap: bool) -> Self {
         Self {
             instruction_type,
             ident: Some(ident),
             args: vec![],
+            increment_ap,
+        }
+    }
+
+    pub fn new_jmp_label_if(instruction_type: InstructionType, ident: Identifier, condition: Expr, increment_ap: bool) -> Self {
+        Self {
+            instruction_type,
+            ident: Some(ident),
+            args: vec![condition],
             increment_ap,
         }
     }
@@ -337,7 +355,7 @@ impl Expr {
             write!(f, " '{}'", ident.token.lexeme)?;
         }
 
-        let has_children = self.left.is_some() || self.right.is_some() || !self.args.is_empty() || self.type_arg.is_some();
+        let has_children = self.left.is_some() || self.right.is_some() || !self.paren_args.is_empty() || !self.brace_args.is_empty() || self.type_arg.is_some();
         if has_children {
             writeln!(f)?;
             
@@ -360,9 +378,13 @@ impl Expr {
             }
             
             // Print args if present
-            for (i, arg) in self.args.iter().enumerate() {
+            for (i, arg) in self.paren_args.iter().enumerate() {
                 arg.fmt_with_indent(f, indent + 1)?;
-                if i < self.args.len() - 1 {
+                writeln!(f)?;
+            }
+            for (i, arg) in self.brace_args.iter().enumerate() {
+                arg.fmt_with_indent(f, indent + 1)?;
+                if i < self.brace_args.len() - 1 {
                     writeln!(f)?;
                 }
             }

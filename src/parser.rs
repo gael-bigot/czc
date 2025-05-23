@@ -175,9 +175,8 @@ impl Parser {
     }
 
     
-    fn paren_arglist(&mut self) -> Vec<ExprAssignment> {
+    fn arglist(&mut self) -> Vec<ExprAssignment> {
         let mut args = Vec::new();
-        self.consume(crate::lexer::TokenType::LParen, "Expected '('");
         while !self.check(crate::lexer::TokenType::RParen) {
             args.push(self.expr_assignment());
             if !self.check(crate::lexer::TokenType::Comma) {
@@ -185,7 +184,20 @@ impl Parser {
             }
             self.advance();
         }
+        args
+    }
+
+    fn paren_arglist(&mut self) -> Vec<ExprAssignment> {
+        self.consume(crate::lexer::TokenType::LParen, "Expected '('");
+        let args = self.arglist();
         self.consume(crate::lexer::TokenType::RParen, "Expected ')'");
+        args
+    }
+
+    fn brace_arglist(&mut self) -> Vec<ExprAssignment> {
+        self.consume(crate::lexer::TokenType::LBrace, "Expected '{'");
+        let args = self.arglist();
+        self.consume(crate::lexer::TokenType::RBrace, "Expected '}'");
         args
     }
     
@@ -300,9 +312,13 @@ impl Parser {
                     Expr::new_terminal(ExprType::IntegerLiteral, token)
                 }
                 crate::lexer::TokenType::Identifier => {
-                    if self.check(crate::lexer::TokenType::LParen) {
-                        let args = self.paren_arglist();
-                        Expr::new_function_call(token.lexeme, args)
+                    if self.check(crate::lexer::TokenType::LBrace){
+                        let brace_args = self.brace_arglist();
+                        let paren_args = self.paren_arglist();
+                        Expr::new_function_call(Identifier { token }, paren_args, brace_args)
+                    } else if self.check(crate::lexer::TokenType::LParen) {
+                        let paren_args = self.paren_arglist();
+                        Expr::new_function_call(Identifier { token }, paren_args, vec![])
                     } else if self.check(crate::lexer::TokenType::LBracket) {
                         self.advance();
                         let expr = self.expression();
@@ -330,9 +346,8 @@ impl Parser {
                     self.consume(crate::lexer::TokenType::RBracket, "Expected ']' after dereferencing");
                     Expr::new_unary(ExprType::Deref, expr)
                 }
-                // TODO cast when we have types
+
                 crate::lexer::TokenType::Cast => {
-                    //self.advance();
                     self.consume(crate::lexer::TokenType::LParen, "Expected '(' after cast");
                     let expr = self.expression();
                     self.consume(crate::lexer::TokenType::Comma, "Expected ','");
@@ -375,20 +390,26 @@ impl Parser {
                 let expr = self.expression();
                 if self.match_token(crate::lexer::TokenType::If) {
                     let condition = self.expression();
-                    Instruction::new_binary(InstructionType::JmpRel, expr, condition, self.does_increment_ap())
+                    // jump rel if
+                    Instruction::new_binary(InstructionType::Jnz, expr, condition, self.does_increment_ap())
                 } else {
+                    // jump rel
                     Instruction::new_unary(InstructionType::JmpRel, expr, self.does_increment_ap())
                 }
             } else if self.match_token(crate::lexer::TokenType::Abs) {
                 let expr = self.expression();
+                // jump abs 
+                Instruction::new_unary(InstructionType::JmpAbs, expr, self.does_increment_ap())
+            } else {
+                let ident = self.identifier();
                 if self.match_token(crate::lexer::TokenType::If) {
                     let condition = self.expression();
-                    Instruction::new_binary(InstructionType::JmpAbs, expr, condition, self.does_increment_ap())
+                    // jump if
+                    Instruction::new_jmp_label_if(InstructionType::JnzLabel, ident, condition, self.does_increment_ap())
                 } else {
-                    Instruction::new_unary(InstructionType::JmpAbs, expr, self.does_increment_ap())
+                    // jump
+                    Instruction::new_jmp_label(InstructionType::Jmp, ident, self.does_increment_ap())
                 }
-            } else {
-                Instruction::new_jmp(InstructionType::Jmp, self.identifier(), self.does_increment_ap())
             }
         } else if self.match_token(crate::lexer::TokenType::Ret) {
             Instruction::new_ret(self.does_increment_ap())
