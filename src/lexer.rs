@@ -1,23 +1,33 @@
 use ariadne::{Color, Label, Report, ReportKind, Source};
 use logos::Logos;
 
+#[derive(Debug, Clone)]
+pub struct Token {
+    pub token_type: TokenType,
+    pub lexeme: String,
+    pub span: (usize, usize),
+}
+
 
 #[derive(Logos, Debug, Clone, PartialEq, Eq)]
 #[logos(skip r"[\t\n ]+")]
 #[logos(skip r"//.*\n")]
-pub enum Token {
+pub enum TokenType {
 
-    #[regex("[0-9]+", |lex| lex.slice().parse().ok())]
-    Int(u64),
+    #[regex("[0-9]+")]
+    Int,
 
-    #[regex(r"0x[0-9a-fA-F]+", |lex| u64::from_str_radix(&lex.slice()[2..], 16).ok())]
-    HexInt(u64),
-    #[regex(r"[a-zA-Z_][a-zA-Z_0-9]*(\.[a-zA-Z_][a-zA-Z_0-9]*)*", |lex| Some(lex.slice().to_string()))]
-    Identifier(String),
-    #[regex(r#"".""#, |lex| Some(lex.slice().to_string()))]
-    String(String),
-    #[regex(r"'.'", |lex| Some(lex.slice().to_string()))]
-    ShortString(String),
+    #[regex(r"%\{(.*)%\}")]
+    Hint,
+
+    #[regex(r"0x[0-9a-fA-F]+")]
+    HexInt,
+    #[regex(r"[a-zA-Z_][a-zA-Z_0-9]*(\.[a-zA-Z_][a-zA-Z_0-9]*)*")]
+    Identifier,
+    #[regex(r#"".""#)]
+    String,
+    #[regex(r"'.'")]
+    ShortString,
 
     #[token("++")]
     PlusPlus,
@@ -162,19 +172,25 @@ pub enum Token {
     #[token("alloc_locals")]
     AllocLocals,
 
+    EOF,
+    Error,
+
 }
-
-
 
 
 pub fn lex(input: &str, file_name: &str) -> (Vec<Token>, u32) {
     let mut error_counter = 0;
-    let mut lex = Token::lexer(input);
+    let mut lex = TokenType::lexer(input);
     let mut tokens = Vec::new();
     while let Some(token) = lex.next() {
         let lexeme = lex.slice().to_string();
         if let Ok(token) = token {
-            tokens.push(token);
+            let lexeme = lex.slice().to_string();
+            tokens.push(Token {
+                token_type: token,
+                lexeme,
+                span: (lex.span().start, lex.span().end),
+            });
         } else {
             let error_span = (file_name, lex.span().start..lex.span().end);
             let _ = Report::build(ReportKind::Error, error_span.clone())
@@ -187,5 +203,10 @@ pub fn lex(input: &str, file_name: &str) -> (Vec<Token>, u32) {
             error_counter += 1;
         }
     }
+    tokens.push(Token {
+        token_type: TokenType::EOF,
+        lexeme: "".to_string(),
+        span: (0, 0),
+    });
     (tokens, error_counter)
 }

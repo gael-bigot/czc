@@ -1,208 +1,122 @@
-use chumsky::prelude::*;
 use crate::ast::*;
 use crate::lexer::Token;
+use ariadne::{Color, Label, Report, ReportKind, Source};
 
 
-pub fn expr_parser<'src>() -> impl Parser<'src, &'src [Token], Expr<'src>> {
-    let expr = recursive(|expr| {
-
-        let regexpr = choice((
-            just(Token::Ap).to(Expr::Register(Register::Ap)),
-            just(Token::Fp).to(Expr::Register(Register::Fp)),
-        ));
-
-        let atom = choice((
-            regexpr,
-            // Literals
-            select! {
-                Token::Int(n) => Expr::IntegerLiteral(n),
-                Token::HexInt(n) => Expr::IntegerLiteral(n),
-                Token::ShortString(s) => Expr::IntegerLiteral(s.parse().unwrap_or(0)),
-                Token::Identifier(s) => Expr::Identifier(s.to_owned().leak()),
-            },
-            // Parenthesized expressions
-            expr.clone().delimited_by(just(Token::LParen), just(Token::RParen)),
-            // Dereference
-            just(Token::LBracket).then(expr.clone()).then(just(Token::RBracket)).map(|((_, ptr), _)| Expr::Deref(Box::new(ptr))),
-            // Cast
-            just(Token::Cast)
-                .then(just(Token::LParen))
-                .then(expr.clone())
-                .then(just(Token::Comma))
-                .then(expr)
-                .then(just(Token::RParen)).map(|((((_, lhs), _), rhs), _)| Expr::Cast(Box::new(lhs), Box::new(rhs))),
-        ));
 
 
-        let unary = choice((
-            just(Token::Minus),
-            just(Token::Ampersand),
-            just(Token::New),
-        )).repeated().foldr(atom, |op, rhs| match op {
-            Token::Minus => Expr::Minus(Box::new(rhs)),
-            Token::Ampersand => Expr::AddressOf(Box::new(rhs)),
-            Token::New => Expr::New(Box::new(rhs)),
-            _ => unreachable!(),
-        });
-
-
-        let product = unary.clone().foldl(
-            choice((
-                just(Token::Star).then(unary.clone()),
-                just(Token::Slash).then(unary.clone()),
-            )).repeated(),
-            |lhs, (op, rhs)| match op {
-                Token::Star => Expr::Mul(Box::new(lhs), Box::new(rhs)),
-                Token::Slash => Expr::Div(Box::new(lhs), Box::new(rhs)),
-                _ => unreachable!(),
-            }
-        );
-
-        let sum = product.clone().foldl(
-            choice((
-                just(Token::Plus).then(product.clone()),
-                just(Token::Minus).then(product.clone()),
-            )).repeated(),
-            |lhs, (op, rhs)| match op { 
-                Token::Plus => Expr::Add(Box::new(lhs), Box::new(rhs)),
-                Token::Minus => Expr::Sub(Box::new(lhs), Box::new(rhs)),
-                _ => unreachable!(),
-            }
-        );
-
-        let bool_atom = sum.clone().foldl(
-            choice((
-                just(Token::DoubleEq).then(sum.clone()),
-                just(Token::Neq).then(sum.clone()),
-            )).repeated(),
-            |lhs, (op, rhs)| match op {
-                Token::DoubleEq => Expr::Eq(Box::new(lhs), Box::new(rhs)),
-                Token::Neq => Expr::Neq(Box::new(lhs), Box::new(rhs)),
-                _ => unreachable!(),
-            }
-        );
-
-        let bool_and = bool_atom.clone().foldl(
-            choice((
-                just(Token::And).then(bool_atom.clone()),
-            )).repeated(),
-            |lhs, (op, rhs)| match op {
-                Token::And => Expr::And(Box::new(lhs), Box::new(rhs)),
-                _ => unreachable!(),
-            }
-        );
-
-        bool_and
-    });
-
-    expr
+pub struct Parser{
+    tokens: Vec<Token>,
+    current: usize,
+    source: String,
+    file_name: String,
 }
 
-fn assignement_expression_parser<'src>() -> impl Parser<'src, &'src [Token], ExprAssignment<'src>> {
-    let assignement = select! {
-        Token::Identifier(s) => s
-    }.then(just(Token::Equal))
-     .then(expr_parser())
-     .map(|((name, _), rhs)| ExprAssignment::Assign(name.to_owned().leak(), Box::new(rhs)));
-    assignement.or(expr_parser().map(|expr| ExprAssignment::Expr(Box::new(expr))))
-}
-
-fn typed_identifier_parser<'src>() -> impl Parser<'src, &'src [Token], TypedIdentifier<'src>> {
-    // Parse optional modifier
-    let modifier = just(Token::Local)
-        .to(Modifier::Local)
-        .or_not();
-
-    // Parse identifier name
-    let name = select! {
-        Token::Identifier(s) => s.to_string().leak()
-    };
-
-    // Parse optional type annotation
-    let type_ = just(Token::Colon)
-        .then(type_parser())
-        .map(|(_, t)| t)
-        .or_not();
-
-    // Combine all parts
-    modifier
-        .then(name)
-        .then(type_)
-        .map(|((modifier, name), type_)| TypedIdentifier {
-            modifier,
-            name,
-            type_,
-        })
-}
-
-/*
-fn named_type_parser<'src>() -> impl Parser<'src, &'src [Token], NamedType<'src>> {
-    
-}
-*/
-
-// Type system parsers
-fn type_parser<'src>() -> impl Parser<'src, &'src [Token], Type<'src>> {
-    let named_type_parser = select! {
-        Token::Identifier(s) => s.to_string().leak()
+impl Parser {
+    pub fn new(tokens: Vec<Token>, file_name: String, source: String) -> Self {
+        Self { tokens, current: 0, source, file_name }
     }
-    .then(just(Token::Colon).then(type_parser()).map(|(_, t)| t).or_not())
-    .map(|(name, type_)| NamedType { name, type_ });
 
-    recursive(|type_parser| {
-        // Parse non-identifier types
-        let non_identifier_type = choice((
-            // felt
-            just(Token::Felt).to(Type::Felt),
-            // codeoffset
-            just(Token::CodeOffset).to(Type::CodeOffset),
-            // pointer (type *)
-            type_parser.clone().then(just(Token::Star)).map(|(t, _)| Type::Pointer(Box::new(t))),
+    fn match_token(&mut self, token_type: crate::lexer::TokenType) -> bool {
+        if self.check(token_type) {
+            self.advance();
+            return true;
+        }
+        false
+    }
 
-            type_parser.clone().then(just(Token::DoubleStar)).map(|(t, _)| Type::Pointer2(Box::new(t))),
- 
-            named_type_parser
-                .separated_by(just(Token::Comma))
-                .collect()
-                .delimited_by(just(Token::LParen), just(Token::RParen))
-                .map(|types| Type::Tuple(types)),
-        ));
-        // Combine both types
-    non_identifier_type
-    })
-    
+    fn check(&mut self, token_type: crate::lexer::TokenType) -> bool {
+        if self.is_at_end() {
+            return false;
+        }
+        self.peek().token_type == token_type
+    }
+
+    fn is_at_end(&mut self) -> bool {
+        self.peek().token_type == crate::lexer::TokenType::EOF
+    }
+
+    fn advance(&mut self) -> crate::lexer::Token {
+        self.current += 1;
+        self.tokens[self.current - 1].clone()
+    }
+
+    fn peek(&mut self) -> crate::lexer::Token {
+        self.tokens[self.current].clone()
+    }
+
+    fn previous(&mut self) -> crate::lexer::Token {
+        self.tokens[self.current - 1].clone()
+    }
+
+    fn consume(&mut self, token_type: crate::lexer::TokenType, message: &str) -> Token {
+        if self.check(token_type) {
+            self.advance()
+        } else {
+            let previous_token_span = self.previous().span;
+            let error_span = (self.file_name.clone(), previous_token_span.0..previous_token_span.1);
+            let _ = Report::build(ReportKind::Error, error_span.clone())
+                .with_message("Parser error")
+                .with_label(Label::new(error_span)
+                    .with_message(message)
+                    .with_color(Color::Red))
+                .finish()
+                .print((self.file_name.clone(), Source::from(self.source.clone())));
+            Token {
+                token_type: crate::lexer::TokenType::Error,
+                lexeme: "".to_string(),
+                span: (0, 0),
+            }
+        }
+    }
+
+    pub fn parse(&mut self) -> Vec<Expr> {
+        let mut exprs = Vec::new();
+        while !self.is_at_end() {
+            exprs.push(self.expression());
+        }
+        exprs
+    }
+
+    fn expression(&mut self) -> Expr {
+        self.atom()
+    }
+
+
+
+    fn atom(&mut self) -> Expr {
+        let token = self.advance();
+        match token.token_type {
+            crate::lexer::TokenType::Int => {
+                Expr::new_terminal(ExprType::IntegerLiteral, token)
+            }
+            crate::lexer::TokenType::Identifier => {
+                Expr::new_terminal(ExprType::Identifier, token)
+            }
+            crate::lexer::TokenType::HexInt => {
+                Expr::new_terminal(ExprType::IntegerLiteral, token)
+            }
+            crate::lexer::TokenType::ShortString => {
+                Expr::new_terminal(ExprType::IntegerLiteral, token)
+            }
+            crate::lexer::TokenType::NonDet => {
+                let hint = self.consume(crate::lexer::TokenType::NonDet, "Expected hint after nondet");
+                Expr::new_terminal(ExprType::Hint, hint)
+            }
+            crate::lexer::TokenType::Ap | crate::lexer::TokenType::Fp => {
+                Expr::new_terminal(ExprType::Register, token)
+            }
+            // TODO function call
+            crate::lexer::TokenType::LBracket => {
+                let expr = self.expression();
+                self.consume(crate::lexer::TokenType::RBracket, "Expected ']' after dereferencing");
+                Expr::new_unary(ExprType::Deref, expr)
+            }
+            // TODO subscript
+            // TODO dot
+            // TODO cast
+            // TODO arglist
+            _ => todo!(),
+        }
+    }
 }
-
-/*
-// Instruction parsers
-fn instruction_parser<'src>() -> impl Parser<'src, &'src [Token], Instruction<'src>> {
-    todo!("Implement instruction parser")
-}
-
-fn call_instruction_parser<'src>() -> impl Parser<'src, &'src [Token], CallInstruction<'src>> {
-    todo!("Implement call instruction parser")
-}
-
-// Code element parsers
-fn code_element_parser<'src>() -> impl Parser<'src, &'src [Token], CodeElement<'src>> {
-    todo!("Implement code element parser")
-}
-
-fn function_parser<'src>() -> impl Parser<'src, &'src [Token], Function<'src>> {
-    todo!("Implement function parser")
-}
-
-fn struct_parser<'src>() -> impl Parser<'src, &'src [Token], Struct<'src>> {
-    todo!("Implement struct parser")
-}
-
-fn namespace_parser<'src>() -> impl Parser<'src, &'src [Token], Namespace<'src>> {
-    todo!("Implement namespace parser")
-}
-
-fn import_parser<'src>() -> impl Parser<'src, &'src [Token], Import<'src>> {
-    todo!("Implement import parser")
-}
-
-
-*/
