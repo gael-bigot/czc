@@ -2,6 +2,27 @@ use crate::lexer::Token;
 use std::fmt::{self, Debug};
 
 
+
+#[derive(Debug, Clone)]
+pub enum NamedType{
+    Identifier(Identifier, Option<Type>),
+    Type(Type),
+}
+
+#[derive(Clone)]
+pub enum Type{
+    Felt,
+    CodeOffset,
+    Pointer(Box<Type>),
+    Pointer2(Box<Type>),
+    Tuple(Vec<Type>),
+    Struct(Identifier),
+    Named(Identifier, Box<Type>),
+    Error,
+}
+
+
+
 #[derive(Debug, Clone)]
 pub enum ExprType {
     IntegerLiteral,
@@ -23,7 +44,6 @@ pub enum ExprType {
     And,
     FunctionCall,
     Subscript,
-    Tuple,
     TupleOrParen,
     ErrorExpr,
 }
@@ -36,12 +56,13 @@ pub struct Expr {
     pub expr_type: ExprType,
     pub left: Option<Box<Expr>>,
     pub right: Option<Box<Expr>>,
+    pub type_arg: Option<Type>,
     pub args: Vec<ExprAssignment>,
 }
 
 
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Identifier {
     pub token: Token,
 }
@@ -53,6 +74,46 @@ pub enum ExprAssignment {
 }
 
 
+
+impl Type {
+    fn fmt_with_indent(&self, f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
+        write!(f, "{:indent$}", "", indent = indent * 2)?;
+        match self {
+            Type::Felt => write!(f, "Felt"),
+            Type::CodeOffset => write!(f, "CodeOffset"),
+            Type::Pointer(inner) => {
+                writeln!(f, "Pointer")?;
+                inner.fmt_with_indent(f, indent + 1)
+            }
+            Type::Pointer2(inner) => {
+                writeln!(f, "Pointer2")?;
+                inner.fmt_with_indent(f, indent + 1)
+            }
+            Type::Tuple(types) => {
+                writeln!(f, "Tuple")?;
+                for t in types {
+                    t.fmt_with_indent(f, indent + 1)?;
+                    writeln!(f)?;
+                }
+                Ok(())
+            }
+            Type::Struct(ident) => {
+                writeln!(f, "Struct '{}'", ident.token.lexeme)
+            }
+            Type::Named(ident, inner) => {
+                writeln!(f, "Named '{}'", ident.token.lexeme)?;
+                inner.fmt_with_indent(f, indent + 1)
+            }
+            Type::Error => write!(f, "Error"),
+        }
+    }
+}
+
+impl Debug for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt_with_indent(f, 0)
+    }
+}
 
 
 
@@ -90,6 +151,7 @@ impl Expr {
             expr_type: ExprType::ErrorExpr,
             left: None,
             right: None,
+            type_arg: None,
             args: vec![],
         }
     }
@@ -100,6 +162,7 @@ impl Expr {
             expr_type: ExprType::Identifier,
             left: None,
             right: None,
+            type_arg: None,
             args: vec![],
         }
     }
@@ -111,6 +174,7 @@ impl Expr {
             expr_type,
             left: None,
             right: None,
+            type_arg: None,
             args: vec![],
         }
     }
@@ -122,6 +186,7 @@ impl Expr {
             expr_type,
             left: Some(Box::new(child)),
             right: None,
+            type_arg: None,
             args: vec![],
         }
     }
@@ -133,6 +198,7 @@ impl Expr {
             expr_type,
             left: Some(Box::new(left)),
             right: Some(Box::new(right)),
+            type_arg: None,
             args: vec![],
         }
     }
@@ -144,6 +210,7 @@ impl Expr {
             expr_type: ExprType::FunctionCall,
             left: None,
             right: None,
+            type_arg: None,
             args,
         }
     }
@@ -155,7 +222,20 @@ impl Expr {
             expr_type: ExprType::TupleOrParen,
             left: None,
             right: None,
+            type_arg: None,
             args,
+        }
+    }
+
+    pub fn new_cast(type_arg: Type, child: Expr) -> Self {
+        Self {
+            token: None,
+            ident: None,
+            expr_type: ExprType::Cast,
+            left: Some(Box::new(child)),
+            right: None,
+            type_arg: Some(type_arg),
+            args: vec![],
         }
     }
 }
@@ -200,6 +280,12 @@ impl Expr {
             // Print right child if present
             if let Some(right) = &self.right {
                 right.fmt_with_indent(f, indent + 1)?;
+                writeln!(f)?;
+            }
+
+            // Print right child if present
+            if let Some(type_arg) = &self.type_arg {
+                type_arg.fmt_with_indent(f, indent + 1)?;
                 writeln!(f)?;
             }
             

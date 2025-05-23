@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use crate::ast::*;
 use crate::lexer::Token;
 
@@ -54,7 +56,7 @@ impl Parser {
             self.advance()
         } else {
             let previous_token_span = self.previous().span;
-            crate::error::report_error(self.file_name.clone(), self.source.clone(), previous_token_span, "Parser error".to_string(), message.to_string());
+            crate::error::report_error(self.file_name.clone(), self.source.clone(), previous_token_span, "Syntax error".to_string(), message.to_string());
             Token {
                 token_type: crate::lexer::TokenType::Error,
                 lexeme: "".to_string(),
@@ -70,6 +72,52 @@ impl Parser {
         }
         exprs
     }
+
+    fn type_(&mut self) -> Type {
+        self.pointer()
+    }
+
+    fn named_type(&mut self) -> Type {
+        if self.peek().token_type == crate::lexer::TokenType::Identifier {
+            if self.peek().token_type == crate::lexer::TokenType::Colon {
+                let ident = self.identifier();
+                self.consume(crate::lexer::TokenType::Colon, "");
+                let type_ = self.type_();
+                Type::Named(ident, Box::new(type_))
+            } else{
+                self.pointer()
+            }
+        } else {
+            self.pointer()
+        }
+    }
+
+    fn pointer(&mut self) -> Type {
+        let type_ = self.type_atom();
+        if self.check(crate::lexer::TokenType::Star) {
+            self.advance();
+            Type::Pointer(Box::new(type_))
+        } else if self.check(crate::lexer::TokenType::DoubleStar) {
+            self.advance();
+            Type::Pointer2(Box::new(type_))
+        } else {
+            type_
+        }
+    }
+
+
+    fn type_atom(&mut self) -> Type {
+        match self.advance().token_type {
+            crate::lexer::TokenType::Felt => Type::Felt,
+            crate::lexer::TokenType::CodeOffset => Type::CodeOffset,
+            crate::lexer::TokenType::Identifier => Type::Struct(self.identifier()),
+            _ => {
+                crate::error::report_error(self.file_name.clone(), self.source.clone(), self.peek().span, "Syntax error".to_string(), format!("Expected type, got {:?}", self.peek().lexeme));
+                Type::Error
+            }
+        }
+    }
+
 
     fn identifier(&mut self) -> Identifier {
         let token = self.consume(crate::lexer::TokenType::Identifier, "Expected identifier");
@@ -254,9 +302,18 @@ impl Parser {
                     Expr::new_unary(ExprType::Deref, expr)
                 }
                 // TODO cast when we have types
+                crate::lexer::TokenType::Cast => {
+                    //self.advance();
+                    self.consume(crate::lexer::TokenType::LParen, "Expected '(' after cast");
+                    let expr = self.expression();
+                    self.consume(crate::lexer::TokenType::Comma, "Expected ','");
+                    let type_ = self.type_();
+                    println!("type_ is :{:?}", type_.clone());
+                    self.consume(crate::lexer::TokenType::RParen, "Expected ')'");
+                    Expr::new_cast(type_, expr)
+                }
                 _ => {
-                    crate::error::report_error(self.file_name.clone(), self.source.clone(), token.span, "Parser error".to_string(), format!("Expected expression, got {:?}", token.lexeme));
-                    self.current -= 1;
+                    crate::error::report_error(self.file_name.clone(), self.source.clone(), token.span, "Syntax error".to_string(), format!("Expected expression, got {:?}", token.lexeme));
                     Expr::new_error()
                 }
             }
