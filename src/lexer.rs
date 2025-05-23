@@ -12,7 +12,7 @@ pub enum Token {
 
     #[regex(r"0x[0-9a-fA-F]+", |lex| u64::from_str_radix(&lex.slice()[2..], 16).ok())]
     HexInt(u64),
-    #[regex(r"[a-zA-Z_][a-zA-Z_0-9]*", |lex| Some(lex.slice().to_string()))]
+    #[regex(r"[a-zA-Z_][a-zA-Z_0-9]*(\.[a-zA-Z_][a-zA-Z_0-9]*)*", |lex| Some(lex.slice().to_string()))]
     Identifier(String),
     #[regex(r#"".""#, |lex| Some(lex.slice().to_string()))]
     String(String),
@@ -134,6 +134,8 @@ pub enum Token {
     Namespace,
     #[token("with_attr")]
     WithAttr,
+    #[token("else")]
+    Else,
 
     // Cairo file
     // #[token("\n")]
