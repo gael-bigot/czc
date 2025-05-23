@@ -1,13 +1,7 @@
 use crate::lexer::Token;
 use std::fmt::{self, Debug};
 
-
-
-#[derive(Debug, Clone)]
-pub enum NamedType{
-    Identifier(Identifier, Option<Type>),
-    Type(Type),
-}
+// Types
 
 #[derive(Clone)]
 pub enum Type{
@@ -21,7 +15,7 @@ pub enum Type{
     Error,
 }
 
-
+// Expressions
 
 #[derive(Debug, Clone)]
 pub enum ExprType {
@@ -74,73 +68,31 @@ pub enum ExprAssignment {
 }
 
 
+// Instructions
 
-impl Type {
-    fn fmt_with_indent(&self, f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
-        write!(f, "{:indent$}", "", indent = indent * 2)?;
-        match self {
-            Type::Felt => write!(f, "Felt"),
-            Type::CodeOffset => write!(f, "CodeOffset"),
-            Type::Pointer(inner) => {
-                writeln!(f, "Pointer")?;
-                inner.fmt_with_indent(f, indent + 1)
-            }
-            Type::Pointer2(inner) => {
-                writeln!(f, "Pointer2")?;
-                inner.fmt_with_indent(f, indent + 1)
-            }
-            Type::Tuple(types) => {
-                writeln!(f, "Tuple")?;
-                for t in types {
-                    t.fmt_with_indent(f, indent + 1)?;
-                    writeln!(f)?;
-                }
-                Ok(())
-            }
-            Type::Struct(ident) => {
-                writeln!(f, "Struct '{}'", ident.token.lexeme)
-            }
-            Type::Named(ident, inner) => {
-                writeln!(f, "Named '{}'", ident.token.lexeme)?;
-                inner.fmt_with_indent(f, indent + 1)
-            }
-            Type::Error => write!(f, "Error"),
-        }
-    }
+#[derive(Clone)]
+pub struct Instruction {
+    pub instruction_type: InstructionType,
+    pub ident: Option<Identifier>,
+    pub args: Vec<Expr>,
+    pub increment_ap: bool,
+    
 }
 
-impl Debug for Type {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.fmt_with_indent(f, 0)
-    }
-}
-
-
-
-
-
-
-impl Debug for ExprAssignment {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.fmt_with_indent(f, 0)
-    }
-}
-
-impl ExprAssignment {
-    fn fmt_with_indent(&self, f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
-        match self {
-            ExprAssignment::Expr(expr) => {
-                expr.fmt_with_indent(f, indent)
-            }
-            ExprAssignment::Assign(ident, expr) => {
-                write!(f, "{:indent$}", "", indent = indent * 2)?;
-                write!(f, "Assign '{}' = ", ident.token.lexeme)?;
-                writeln!(f)?;
-                write!(f, "{:indent$}", "", indent = indent * 2)?;
-                expr.fmt_with_indent(f, indent)
-            }
-        }
-    }
+#[derive(Debug, Clone)]
+pub enum InstructionType {
+    CallRel,
+    CallAbs,
+    Call,
+    AssertEq,
+    JmpRel,
+    JmpAbs,
+    Jmp,
+    Jnz,
+    JnzLabel,
+    Ret,
+    AddAp,
+    DataWord,
 }
 
 impl Expr {
@@ -240,6 +192,126 @@ impl Expr {
     }
 }
 
+impl Instruction{
+
+    pub fn new_unary(instruction_type: InstructionType, child: Expr, increment_ap: bool) -> Self {
+        Self {
+            instruction_type,
+            ident: None,
+            args: vec![child],
+            increment_ap,
+        }
+    }
+
+    pub fn new_binary(instruction_type: InstructionType, left: Expr, right: Expr, increment_ap: bool) -> Self {
+        Self {      
+            instruction_type,
+            ident: None,
+            args: vec![left, right],
+            increment_ap,
+        }
+    }
+
+    pub fn new_call(instruction_type: InstructionType, ident: Identifier, increment_ap: bool) -> Self {
+        Self {
+            instruction_type,
+            ident: Some(ident),
+            args: vec![],
+            increment_ap,
+        }
+    }
+
+    pub fn new_ret(increment_ap: bool) -> Self {
+        Self {
+            instruction_type: InstructionType::Ret,
+            ident: None,
+            args: vec![],
+            increment_ap,
+        }
+    }
+
+    pub fn new_jmp(instruction_type: InstructionType, ident: Identifier, increment_ap: bool) -> Self {
+        Self {
+            instruction_type,
+            ident: Some(ident),
+            args: vec![],
+            increment_ap,
+        }
+    }
+
+}
+
+impl Type {
+    fn fmt_with_indent(&self, f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
+        write!(f, "{:indent$}", "", indent = indent * 2)?;
+        match self {
+            Type::Felt => write!(f, "Felt"),
+            Type::CodeOffset => write!(f, "CodeOffset"),
+            Type::Pointer(inner) => {
+                write!(f, "Pointer")?;
+                writeln!(f)?;
+                inner.fmt_with_indent(f, indent + 1)
+            }
+            Type::Pointer2(inner) => {
+                write!(f, "Pointer2")?;
+                writeln!(f)?;
+                inner.fmt_with_indent(f, indent + 1)
+            }
+            Type::Tuple(types) => {
+                write!(f, "Tuple")?;
+                writeln!(f)?;
+                for (i, t) in types.iter().enumerate() {
+                    t.fmt_with_indent(f, indent + 1)?;
+                    if i < types.len() - 1 {
+                        writeln!(f)?;
+                    }
+                }
+                Ok(())
+            }
+            Type::Struct(ident) => {
+                write!(f, "Struct '{}'", ident.token.lexeme)
+            }
+            Type::Named(ident, inner) => {
+                write!(f, "Named '{}'", ident.token.lexeme)?;
+                writeln!(f)?;
+                inner.fmt_with_indent(f, indent + 1)
+            }
+            Type::Error => write!(f, "Error"),
+        }
+    }
+}
+
+impl Debug for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt_with_indent(f, 0)
+    }
+}
+
+
+impl Debug for ExprAssignment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt_with_indent(f, 0)
+    }
+}
+
+impl ExprAssignment {
+    fn fmt_with_indent(&self, f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
+        match self {
+            ExprAssignment::Expr(expr) => {
+                expr.fmt_with_indent(f, indent)
+            }
+            ExprAssignment::Assign(ident, expr) => {
+                write!(f, "{:indent$}", "", indent = indent * 2)?;
+                write!(f, "Assign '{}' = ", ident.token.lexeme)?;
+                writeln!(f)?;
+                expr.fmt_with_indent(f, indent + 1)
+            }
+        }
+    }
+}
+
+
+
 
 
 impl Debug for Expr {
@@ -250,7 +322,6 @@ impl Debug for Expr {
 
 impl Expr {
     fn fmt_with_indent(&self, f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
-        // Print indentation
         write!(f, "{:indent$}", "", indent = indent * 2)?;
         
         // Print the expression type
@@ -266,8 +337,7 @@ impl Expr {
             write!(f, " '{}'", ident.token.lexeme)?;
         }
 
-        // Print children with increased indentation
-        let has_children = self.left.is_some() || self.right.is_some() || !self.args.is_empty();
+        let has_children = self.left.is_some() || self.right.is_some() || !self.args.is_empty() || self.type_arg.is_some();
         if has_children {
             writeln!(f)?;
             
@@ -283,19 +353,59 @@ impl Expr {
                 writeln!(f)?;
             }
 
-            // Print right child if present
+            // Print type argument if present
             if let Some(type_arg) = &self.type_arg {
                 type_arg.fmt_with_indent(f, indent + 1)?;
                 writeln!(f)?;
             }
             
             // Print args if present
-            for arg in &self.args {
+            for (i, arg) in self.args.iter().enumerate() {
                 arg.fmt_with_indent(f, indent + 1)?;
-                writeln!(f)?;
+                if i < self.args.len() - 1 {
+                    writeln!(f)?;
+                }
             }
         }
         
         Ok(())
     }
 }
+
+
+impl Debug for Instruction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt_with_indent(f, 0)
+    }
+}
+
+impl Instruction {
+    fn fmt_with_indent(&self, f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
+        write!(f, "{:indent$}", "", indent = indent * 2)?;
+        write!(f, "{:?}", self.instruction_type)?;
+        if self.increment_ap {
+            write!(f, " (ap++)")?;
+        }
+        writeln!(f)?;
+
+        // Print identifier if present
+        if let Some(ident) = &self.ident {
+            write!(f, "{:indent$}", "", indent = (indent + 1) * 2)?;
+            write!(f, "Identifier '{}'", ident.token.lexeme)?;
+            writeln!(f)?;
+        }
+
+        // Print arguments
+        for (i, arg) in self.args.iter().enumerate() {
+            arg.fmt_with_indent(f, indent + 1)?;
+            if i < self.args.len() - 1 {
+                writeln!(f)?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+
+

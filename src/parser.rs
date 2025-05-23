@@ -59,22 +59,22 @@ impl Parser {
         if self.check(token_type) {
             self.advance()
         } else {
-            let previous_token_span = self.previous().span;
-            crate::error::report_error(self.file_name.clone(), self.source.clone(), previous_token_span, "Syntax error".to_string(), message.to_string());
+            let span = self.peek().span;
+            crate::error::report_error(self.file_name.clone(), self.source.clone(), span, "Syntax error".to_string(), message.to_string());
             Token {
                 token_type: crate::lexer::TokenType::Error,
                 lexeme: "".to_string(),
-                span: (previous_token_span.0, previous_token_span.0),
+                span: (span.0, span.0),
             }
         }
     }
 
-    pub fn parse(&mut self) -> Vec<Expr> {
-        let mut exprs = Vec::new();
+    pub fn parse(&mut self) -> Vec<Instruction> {
+        let mut instructions = Vec::new();
         while !self.is_at_end() {
-            exprs.push(self.expression());
+            instructions.push(self.instruction());
         }
-        exprs
+        instructions
     }
 
     fn type_(&mut self) -> Type {
@@ -125,11 +125,17 @@ impl Parser {
 
 
     fn type_atom(&mut self) -> Type {
-        let token = self.advance();
+        let token = self.peek();
         match token.token_type {
-            crate::lexer::TokenType::Felt => Type::Felt,
-            crate::lexer::TokenType::CodeOffset => Type::CodeOffset,
-            crate::lexer::TokenType::Identifier => Type::Struct(Identifier { token }),
+            crate::lexer::TokenType::Felt => {
+                self.advance();
+                Type::Felt
+            }
+            crate::lexer::TokenType::CodeOffset => {
+                self.advance();
+                Type::CodeOffset
+            }
+            crate::lexer::TokenType::Identifier => Type::Struct(self.identifier()),
             crate::lexer::TokenType::LParen => {
                 let types = self.paren_type_list();
                 Type::Tuple(types)
@@ -343,5 +349,60 @@ impl Parser {
         }
     }
 
-    
+    fn does_increment_ap(&mut self) -> bool {
+        let old_current = self.current;
+        if self.match_token(crate::lexer::TokenType::Comma)
+            && self.match_token(crate::lexer::TokenType::Ap)
+            && self.match_token(crate::lexer::TokenType::PlusPlus) {
+            true
+        } else {
+            self.current = old_current;
+            false
+        }
+    }
+
+    fn instruction(&mut self) -> Instruction {
+        if self.match_token(crate::lexer::TokenType::Call) {
+            if self.match_token(crate::lexer::TokenType::Rel) {
+                Instruction::new_unary(InstructionType::CallRel, self.expression(), self.does_increment_ap())
+            } else if self.match_token(crate::lexer::TokenType::Abs) {
+                Instruction::new_unary(InstructionType::CallAbs, self.expression(), self.does_increment_ap())
+            } else {
+                Instruction::new_call(InstructionType::Call, self.identifier(), self.does_increment_ap())
+            }
+        } else if self.match_token(crate::lexer::TokenType::Jmp) {
+            if self.match_token(crate::lexer::TokenType::Rel) {
+                let expr = self.expression();
+                if self.match_token(crate::lexer::TokenType::If) {
+                    let condition = self.expression();
+                    Instruction::new_binary(InstructionType::JmpRel, expr, condition, self.does_increment_ap())
+                } else {
+                    Instruction::new_unary(InstructionType::JmpRel, expr, self.does_increment_ap())
+                }
+            } else if self.match_token(crate::lexer::TokenType::Abs) {
+                let expr = self.expression();
+                if self.match_token(crate::lexer::TokenType::If) {
+                    let condition = self.expression();
+                    Instruction::new_binary(InstructionType::JmpAbs, expr, condition, self.does_increment_ap())
+                } else {
+                    Instruction::new_unary(InstructionType::JmpAbs, expr, self.does_increment_ap())
+                }
+            } else {
+                Instruction::new_jmp(InstructionType::Jmp, self.identifier(), self.does_increment_ap())
+            }
+        } else if self.match_token(crate::lexer::TokenType::Ret) {
+            Instruction::new_ret(self.does_increment_ap())
+        } else if self.match_token(crate::lexer::TokenType::Ap) {
+            self.consume(crate::lexer::TokenType::PlusEq, "Expected '+=' after ap");
+            Instruction::new_unary(InstructionType::AddAp, self.expression(), self.does_increment_ap())
+        } else if self.match_token(crate::lexer::TokenType::Dw) {
+            Instruction::new_unary(InstructionType::DataWord, self.expression(), self.does_increment_ap())
+        } else {
+            let left = self.expression();
+            self.consume(crate::lexer::TokenType::Equal, "Expected '=' in assertion");
+            let right = self.expression();
+            Instruction::new_binary(InstructionType::AssertEq, left, right, self.does_increment_ap())
+        }
+    }
+
 }
