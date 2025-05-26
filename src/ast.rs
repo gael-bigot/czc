@@ -1,5 +1,5 @@
 use crate::lexer::Token;
-use std::{fmt::{self, Debug}, ops::Neg};
+use std::{fmt::{self, Debug}};
 
 // Types
 
@@ -80,7 +80,7 @@ pub struct Instruction {
     
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum InstructionType {
     CallRel,
     CallAbs,
@@ -96,6 +96,7 @@ pub enum InstructionType {
     DataWord,
 }
 
+#[derive(Clone)]
 pub enum CodeElement {
     Instruction(Instruction),
     Const,

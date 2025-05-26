@@ -3,6 +3,8 @@ mod ast;
 mod lexer;
 mod parser;
 mod error;
+mod casm;
+mod lower_to_casm;
 
 extern crate ebnf;
 
@@ -17,7 +19,10 @@ fn run(input: &str, file_name: &str) {
     let mut parser = parser::Parser::new(tokens, file_name.to_string(), input.to_string());
     let code_elements = parser.parse();
     code_elements.iter().for_each(|code_element| println!("{:?}", code_element));
-    
+    let mut compiler = lower_to_casm::Compiler::new(code_elements);
+    for (i, instruction) in compiler.compile().iter().enumerate() {
+        println!("{}\t{:?}", i, instruction);
+    }
 }
 
 fn from_file(path: &str) {
