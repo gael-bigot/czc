@@ -15,8 +15,8 @@ fn run(input: &str, file_name: &str) {
     }
     println!("{:?}", tokens);
     let mut parser = parser::Parser::new(tokens, file_name.to_string(), input.to_string());
-    let instructions = parser.parse();
-    instructions.iter().for_each(|instruction| println!("{:?}", instruction));
+    let code_elements = parser.parse();
+    code_elements.iter().for_each(|code_element| println!("{:?}", code_element));
     
 }
 

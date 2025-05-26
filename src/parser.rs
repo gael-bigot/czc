@@ -69,12 +69,12 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> Vec<Instruction> {
-        let mut instructions = Vec::new();
+    pub fn parse(&mut self) -> Vec<CodeElement> {
+        let mut code_elements = Vec::new();
         while !self.is_at_end() {
-            instructions.push(self.instruction());
+            code_elements.push(self.code_element());
         }
-        instructions
+        code_elements
     }
 
     fn type_(&mut self) -> Type {
@@ -304,6 +304,7 @@ impl Parser {
         let token = self.peek();
         if self.check(crate::lexer::TokenType::LParen) {
             let args = self.paren_arglist();
+            //println!("args are :{:?}", args);
             Expr::new_tuple_or_paren(args)
         } else {
             self.advance();
@@ -424,6 +425,98 @@ impl Parser {
             let right = self.expression();
             Instruction::new_binary(InstructionType::AssertEq, left, right, self.does_increment_ap())
         }
+    }
+
+
+    fn identifier_list_paren(&mut self) -> Vec<Identifier> {
+        let mut identifiers = Vec::new();
+        self.consume(crate::lexer::TokenType::LParen, "Expected '('");
+        while !self.check(crate::lexer::TokenType::RParen) {
+            identifiers.push(self.identifier());
+            if !self.check(crate::lexer::TokenType::Comma) {
+                break;
+            }
+            self.advance();
+        }
+        self.consume(crate::lexer::TokenType::RParen, "Expected ')'");
+        identifiers
+    }
+    
+
+    fn code_element(&mut self) -> CodeElement {
+        let token = self.peek();
+        match token.token_type {
+            crate::lexer::TokenType::If => {
+                self.advance();
+                self.consume(crate::lexer::TokenType::LParen, "Expected '(' after if");
+                let cond = self.expression();
+                self.consume(crate::lexer::TokenType::RParen, "Expected ')' after if");
+                self.consume(crate::lexer::TokenType::LBrace, "Expected '{' after if");
+                let mut body = Vec::new();
+                while !self.check(crate::lexer::TokenType::RBrace) {
+                    body.push(self.code_element());
+                }
+                self.consume(crate::lexer::TokenType::RBrace, "Expected '}' after if");
+                if self.match_token(crate::lexer::TokenType::Else) {
+                    self.consume(crate::lexer::TokenType::LBrace, "Expected '{' after else");
+                    let mut else_body = Vec::new();
+                    while !self.check(crate::lexer::TokenType::RBrace) {
+                        else_body.push(self.code_element());
+                    }
+                    self.consume(crate::lexer::TokenType::RBrace, "Expected '}' after else");
+                    CodeElement::If(cond, body, else_body)
+                } else {
+                    CodeElement::If(cond, body, vec![])
+                }
+            }
+
+            crate::lexer::TokenType::Func => {
+                self.advance();
+                let ident = self.identifier();
+                //self.consume(crate::lexer::TokenType::LParen, "Expected '(' after function");
+                let args = self.identifier_list_paren();
+                // self.consume(crate::lexer::TokenType::RParen, "Expected ')' after function");
+                self.consume(crate::lexer::TokenType::LBrace, "Expected '{' after function");
+                let mut body = Vec::new();
+                while !self.check(crate::lexer::TokenType::RBrace) {
+                    body.push(self.code_element());
+                }
+                self.consume(crate::lexer::TokenType::RBrace, "Expected '}' after function");
+                CodeElement::Function(ident, args, body)
+            }
+
+            crate::lexer::TokenType::Let => {
+                self.advance();
+                let ident = self.identifier();
+                self.consume(crate::lexer::TokenType::Equal, "Expected '=' after let");
+                let expr = self.expression();
+                self.consume(crate::lexer::TokenType::Semicolon, "Expected ';' after let");
+                CodeElement::Reference(ident, expr)
+            }
+
+            crate::lexer::TokenType::Assert => {
+                self.advance();
+                let left = self.expression();
+                self.consume(crate::lexer::TokenType::Equal, "Expected '=' after assert");
+                let right = self.expression();
+                self.consume(crate::lexer::TokenType::Semicolon, "Expected ';' after static assert");
+                CodeElement::CompoundAssertEqual(left, right)
+            }
+            
+            crate::lexer::TokenType::Return => {
+                self.advance();
+                let expr = self.expression();
+                self.consume(crate::lexer::TokenType::Semicolon, "Expected ';' after return");
+                CodeElement::Return(expr)
+            }
+
+            _ => {
+                let instr = self.instruction();
+                self.consume(crate::lexer::TokenType::Semicolon, "Expected ';' after instruction");
+                CodeElement::Instruction(instr)
+            }
+        }
+
     }
 
 }

@@ -1,5 +1,5 @@
 use crate::lexer::Token;
-use std::fmt::{self, Debug};
+use std::{fmt::{self, Debug}, ops::Neg};
 
 // Types
 
@@ -96,6 +96,30 @@ pub enum InstructionType {
     DataWord,
 }
 
+pub enum CodeElement {
+    Instruction(Instruction),
+    Const,
+    Reference(Identifier, Expr),
+    TempVar,
+    CompoundAssertEqual(Expr, Expr),
+    StaticAssert,
+    Return(Expr),
+    If(Expr, Vec<CodeElement>, Vec<CodeElement>),
+    FuncCall,
+    Label,
+    Function(Identifier, Vec<Identifier>, Vec<CodeElement>),
+    Struct,
+    NameSpace,
+    TypeDef,
+    WithAttr,
+    With,
+    Hint,
+    Directive,
+    Import,
+    AllocLocals,
+}
+
+
 impl Expr {
     pub fn new_error() -> Self {
         Self {
@@ -182,7 +206,7 @@ impl Expr {
             left: None,
             right: None,
             type_arg: None,
-            paren_args: vec![],
+            paren_args: args,
             brace_args: vec![],
         }
     }
@@ -426,6 +450,112 @@ impl Instruction {
         }
 
         Ok(())
+    }
+}
+
+impl Debug for CodeElement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt_with_indent(f, 0)
+    }
+}
+
+impl CodeElement {
+    fn fmt_with_indent(&self, f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
+        write!(f, "{:indent$}", "", indent = indent * 2)?;
+        match self {
+            CodeElement::Instruction(instr) => {
+                write!(f, "Instruction")?;
+                writeln!(f)?;
+                instr.fmt_with_indent(f, indent + 1)
+            }
+            CodeElement::Const => write!(f, "Const"),
+            CodeElement::Reference(ident, expr) => {
+                write!(f, "Reference '{}' = ", ident.token.lexeme)?;
+                writeln!(f)?;
+                expr.fmt_with_indent(f, indent + 1)
+            }
+            CodeElement::TempVar => write!(f, "TempVar"),
+            CodeElement::StaticAssert => write!(f, "StaticAssert"),
+            CodeElement::CompoundAssertEqual(left, right) => {
+                write!(f, "CompoundAssertEqual")?;
+                writeln!(f)?;
+                left.fmt_with_indent(f, indent + 1)?;
+                writeln!(f)?;
+                right.fmt_with_indent(f, indent + 1)
+            }
+            CodeElement::Return(expr) => {
+                write!(f, "Return")?;
+                writeln!(f)?;
+                expr.fmt_with_indent(f, indent + 1)
+            }
+            CodeElement::If(cond, body, else_body) => {
+                write!(f, "If")?;
+                writeln!(f)?;
+                write!(f, "{:indent$}", "", indent = (indent + 1) * 2)?;
+                write!(f, "Condition:")?;
+                writeln!(f)?;
+                cond.fmt_with_indent(f, indent + 2)?;
+                writeln!(f)?;
+                write!(f, "{:indent$}", "", indent = (indent + 1) * 2)?;
+                write!(f, "Body:")?;
+                writeln!(f)?;
+                for (i, elem) in body.iter().enumerate() {
+                    elem.fmt_with_indent(f, indent + 2)?;
+                    if i < body.len() - 1 {
+                        writeln!(f)?;
+                    }
+                }
+                if !else_body.is_empty() {
+                    writeln!(f)?;
+                    write!(f, "{:indent$}", "", indent = (indent + 1) * 2)?;
+                    write!(f, "Else:")?;
+                    writeln!(f)?;
+                    for (i, elem) in else_body.iter().enumerate() {
+                        elem.fmt_with_indent(f, indent + 2)?;
+                        if i < else_body.len() - 1 {
+                            writeln!(f)?;
+                        }
+                    }
+                }
+                Ok(())
+            }
+            CodeElement::FuncCall => write!(f, "FuncCall"),
+            CodeElement::Label => write!(f, "Label"),
+            CodeElement::Function(ident, args, body) => {
+                write!(f, "Function '{}'", ident.token.lexeme)?;
+                writeln!(f)?;
+                write!(f, "{:indent$}", "", indent = (indent + 1) * 2)?;
+                write!(f, "Arguments:")?;
+                writeln!(f)?;
+                for (i, arg) in args.iter().enumerate() {
+                    write!(f, "{:indent$}", "", indent = (indent + 2) * 2)?;
+                    write!(f, "'{}'", arg.token.lexeme)?;
+                    if i < args.len() - 1 {
+                        writeln!(f)?;
+                    }
+                }
+                writeln!(f)?;
+                write!(f, "{:indent$}", "", indent = (indent + 1) * 2)?;
+                write!(f, "Body:")?;
+                writeln!(f)?;
+                for (i, elem) in body.iter().enumerate() {
+                    elem.fmt_with_indent(f, indent + 2)?;
+                    if i < body.len() - 1 {
+                        writeln!(f)?;
+                    }
+                }
+                Ok(())
+            }
+            CodeElement::Struct => write!(f, "Struct"),
+            CodeElement::NameSpace => write!(f, "NameSpace"),
+            CodeElement::TypeDef => write!(f, "TypeDef"),
+            CodeElement::WithAttr => write!(f, "WithAttr"),
+            CodeElement::With => write!(f, "With"),
+            CodeElement::Hint => write!(f, "Hint"),
+            CodeElement::Directive => write!(f, "Directive"),
+            CodeElement::Import => write!(f, "Import"),
+            CodeElement::AllocLocals => write!(f, "AllocLocals"),
+        }
     }
 }
 

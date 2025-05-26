@@ -1,19 +1,23 @@
-from starkware.cairo.common.registers import get_fp_and_pc
-
-// Accepts a pointer called my_tuple.
-func foo(my_tuple: felt*) {
-    // 'my_tuple' points to the 'numbers' tuple.
-    @let a = my_tuple[1];  // a = 2.
-    return ();
+func fibonacci(n) {
+    if (n == 0) {
+        return 0;
+    }
+    if (n == 1) {
+        return 1;
+    }
+    let a = fibonacci(n-1);
+    let b = fibonacci(n-2);
+    return a + b;
 }
 
 func main() {
-    alloc_locals;
-    // Get the value of the fp register.
-    let (__fp__, _) = get_fp_and_pc();
-    // Define a tuple.
-    local numbers: (felt, felt, felt) @= (1, 2, 3);
-    // Send the address of the 'numbers' tuple.
-    foo(&numbers);
+    let n = fibonacci(0);
+    assert n = 0;
+    let n = fibonacci(1);
+    assert n = 1;
+    let n = fibonacci(7);
+    assert n = 13;
+    let n = fibonacci(10);
+    assert n = 55;
     return ();
 }
