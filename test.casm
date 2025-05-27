@@ -1,0 +1,14 @@
+f:
+[fp + 0] = [fp + -2], ap++;
+call g;
+[fp + 0] = [fp + -2] + 1, ap++;
+[fp + 1] = [fp + 0], ap++;
+ret;
+g:
+[fp + 0] = [fp + -2] * [fp + -2], ap++;
+[fp + 1] = [fp + 0], ap++;
+ret;
+main:
+[fp + 0] = 10, ap++;
+call f;
+[fp + -2] = 101;

@@ -1,7 +1,5 @@
-func square(n){
-    return n*n;
-}
 
 func main(){
-    assert square(10) = 100;
+    let x = 10;
+    return x*x;
 }

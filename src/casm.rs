@@ -4,11 +4,13 @@ use std::{fmt::{self, Debug, Display}};
 pub enum CasmInstruction {
     Ret,
     Call(String),
+    CallRel(u64),
     IncrFp(i32),
     Label(String),
     Set{
         left : Operand,
         op : Operand,
+        incr_ap : bool,
     },
     Add{
         left : Operand,
@@ -29,9 +31,9 @@ pub enum CasmInstruction {
 
 #[derive(Clone)]
 pub enum Operand {
-    Int(i32),
-    DerefPc(i32),
+    Int(u64),
     DerefFp(i32),
+    DerefAp(i32),
 }
 
 impl Display for Operand {
@@ -39,7 +41,8 @@ impl Display for Operand {
         match self {
             Operand::Int(n) => write!(f, "{}", n),
             Operand::DerefFp(offset) => write!(f, "[fp + {}]", offset),
-            Operand::DerefPc(offset) => write!(f, "[pc + {}]", offset),
+            //Operand::DerefPc(offset) => write!(f, "[pc + {}]", offset),
+            Operand::DerefAp(offset) => write!(f, "[ap + {}]", offset),
         }
     }
 }
@@ -49,7 +52,8 @@ impl Debug for Operand {
         match self {
             Operand::Int(n) => write!(f, "{}", n),
             Operand::DerefFp(offset) => write!(f, "[fp + {}]", offset),
-            Operand::DerefPc(offset) => write!(f, "[pc + {}]", offset),
+            //Operand::DerefPc(offset) => write!(f, "[pc + {}]", offset),
+            Operand::DerefAp(offset) => write!(f, "[ap + {}]", offset),
         }
     }
 }
@@ -57,18 +61,19 @@ impl Debug for Operand {
 impl Debug for CasmInstruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CasmInstruction::Ret => write!(f, "jmp abs [fp - 1]"),
-            CasmInstruction::Call(label) => write!(f, "jmp abs {}", label),
+            CasmInstruction::Ret => write!(f, "ret;"),
+            CasmInstruction::Call(label) => write!(f, "call {};", label),
+            CasmInstruction::CallRel(offset) => write!(f, "call rel {};", offset),
             CasmInstruction::IncrFp(n) => write!(f, "fp += {};", n),
             CasmInstruction::Label(label) => write!(f, "{}:", label),
-            CasmInstruction::Set { left, op } => {
-                write!(f, "{} = {};", left, op)
+            CasmInstruction::Set { left, op , incr_ap} => {
+                write!(f, "{} = {}{}", left, op, if *incr_ap { ", ap++;" } else { ";" })
             }
             CasmInstruction::Add { left, op1, op2 } => {
-                write!(f, "{} = {} + {};", left, op1, op2)
+                write!(f, "{} = {} + {}, ap++;", left, op1, op2)
             }
             CasmInstruction::Mul { left, op1, op2 } => {
-                write!(f, "{} = {} * {};", left, op1, op2)
+                write!(f, "{} = {} * {}, ap++;", left, op1, op2)
             }
             CasmInstruction::Deref { left, op } => {
                 write!(f, "{} = {};", left, op)

@@ -24,14 +24,19 @@ impl Compiler {
 
     fn compile_int_literal(&mut self, expr: Expr) -> Operand {
         assert!(matches!(expr.expr_type, ExprType::IntegerLiteral));
-        Operand::Int(expr.token.unwrap().lexeme.parse::<i32>().unwrap())
+        Operand::Int(expr.token.unwrap().lexeme.parse::<u64>().unwrap())
     }
 
     fn compile_add(&mut self, expr: Expr) -> Operand {
-        let left = self.compile_expr(*expr.left.unwrap());
-        let right = self.compile_expr(*expr.right.unwrap());
+        let mut left = self.compile_expr(*expr.left.unwrap());
+        let mut right = self.compile_expr(*expr.right.unwrap());
+        if let (Operand::Int(n), Operand::Int(m)) = (left.clone(), right.clone()) {
+            return Operand::Int(n+m);
+        } else if let (Operand::Int(n), _) = (left.clone(), right.clone()) {
+            std::mem::swap(&mut left, &mut right);
+        }
         self.casm_instructions.push(CasmInstruction::Add {
-            left: Operand::DerefFp(self.ap_minus_fp),
+            left: Operand::DerefAp(0),
             op1: left,
             op2: right,
         });
@@ -44,7 +49,7 @@ impl Compiler {
         let right = self.compile_expr(*expr.right.unwrap());
         self.casm_instructions.push(CasmInstruction::Add {
             left: left,
-            op1: Operand::DerefFp(self.ap_minus_fp),
+            op1: Operand::DerefAp(0),
             op2: right,
         });
         self.ap_minus_fp += 1;
@@ -52,10 +57,15 @@ impl Compiler {
     }
 
     fn compile_mul(&mut self, expr: Expr) -> Operand {
-        let left = self.compile_expr(*expr.left.unwrap());
-        let right = self.compile_expr(*expr.right.unwrap());
+        let mut left = self.compile_expr(*expr.left.unwrap());
+        let mut right = self.compile_expr(*expr.right.unwrap());
+        if let (Operand::Int(n), Operand::Int(m)) = (left.clone(), right.clone()) {
+            return Operand::Int(n*m);
+        } else if let (Operand::Int(n), _) = (left.clone(), right.clone()) {
+            std::mem::swap(&mut left, &mut right);
+        }
         self.casm_instructions.push(CasmInstruction::Mul {
-            left: Operand::DerefFp(self.ap_minus_fp),
+            left: Operand::DerefAp(0),
             op1: left,
             op2: right,
         });
@@ -78,15 +88,17 @@ impl Compiler {
             let instr = CasmInstruction::Set {
                 left: Operand::DerefFp(self.ap_minus_fp),
                 op: arg_ref,
+                incr_ap: true,
             };
             self.casm_instructions.push(instr);
             self.ap_minus_fp += 1;
         }
-        
+        /*
         // pushin pc to top of Stack
         let instr = CasmInstruction::Set {
             left: Operand::DerefFp(self.ap_minus_fp),
             op: Operand::DerefPc(3),
+            incr_ap: true,
         };
         self.casm_instructions.push(instr);
         self.ap_minus_fp += 1;
@@ -94,11 +106,13 @@ impl Compiler {
         let instr = CasmInstruction::IncrFp(self.ap_minus_fp);
         self.casm_instructions.push(instr);
         self.ap_minus_fp += 1;
+        */
         // calling function
         let instr = CasmInstruction::Call(func_name);
         self.casm_instructions.push(instr);
         self.ap_minus_fp = 0;
-        Operand::DerefFp(-2)
+        // return value is at top of stack
+        Operand::DerefAp(-1)
     }
 
     fn compile_identifier(&mut self, expr: Expr) -> Operand {
@@ -127,7 +141,7 @@ impl Compiler {
         self.casm_instructions.push(CasmInstruction::Label(name.token.lexeme));
 
         for (i, arg) in args.iter().enumerate() {
-            self.local_variables.insert(arg.token.lexeme.clone(), -(args.len() as i32 + 1) + i as i32);
+            self.local_variables.insert(arg.token.lexeme.clone(), -(args.len() as i32 + 2) + i as i32);
         }
         for code_element in body {
             self.compile_code_element(code_element);
@@ -141,6 +155,7 @@ impl Compiler {
                 let instr = CasmInstruction::Set {
                     left: Operand::DerefFp(self.ap_minus_fp),
                     op: Operand::Int(n),
+                    incr_ap: true,
                 };
                 self.casm_instructions.push(instr);
                 self.ap_minus_fp += 1;
@@ -162,6 +177,7 @@ impl Compiler {
                 let instr = CasmInstruction::Set {
                     left: Operand::DerefFp(self.ap_minus_fp),
                     op: Operand::Int(n),
+                    incr_ap: true,
                 };
                 self.casm_instructions.push(instr);
                 self.ap_minus_fp += 1;
@@ -170,16 +186,28 @@ impl Compiler {
                 let instr = CasmInstruction::Set {
                     left: Operand::DerefFp(self.ap_minus_fp),
                     op: Operand::DerefFp(offset),
+                    incr_ap: true,
+                };
+                self.casm_instructions.push(instr);
+                self.ap_minus_fp += 1;
+            }
+            Operand::DerefAp(offset) => {
+                let instr = CasmInstruction::Set {
+                    left: Operand::DerefFp(self.ap_minus_fp),
+                    op: Operand::DerefAp(offset),
+                    incr_ap: true,
                 };
                 self.casm_instructions.push(instr);
                 self.ap_minus_fp += 1;
             }
             _ => todo!(),
         }
+        /*
         // pushing adress return value to stack
         let instr = CasmInstruction::Set {
             left: Operand::DerefFp(self.ap_minus_fp),
             op: Operand::DerefFp(-1),
+            incr_ap: true,
         };
         self.casm_instructions.push(instr);
         self.ap_minus_fp += 1;
@@ -187,6 +215,7 @@ impl Compiler {
         let instr = CasmInstruction::IncrFp(self.ap_minus_fp);
         self.casm_instructions.push(instr);
         self.ap_minus_fp += 1;
+        */
         self.casm_instructions.push(CasmInstruction::Ret);
     }
 
@@ -196,6 +225,7 @@ impl Compiler {
         let instr = CasmInstruction::Set {
             left: value1,
             op: value2,
+            incr_ap: false,
         };
         self.casm_instructions.push(instr);
     }
@@ -230,6 +260,13 @@ impl Compiler {
         }
     }
 
+    fn compile_instruction(&mut self, instr: Instruction) {
+        match instr.instruction_type {
+            InstructionType::Ret => self.casm_instructions.push(CasmInstruction::Ret),
+            _ => todo!(),
+        }
+    }
+
     pub fn compile_code_element(&mut self, code_element: CodeElement) {
         match code_element {
             CodeElement::Reference(ident, expr) => self.compile_reference(ident, expr),
@@ -237,6 +274,7 @@ impl Compiler {
             CodeElement::Function(name, args, body) => self.compile_function(name, args, body),
             CodeElement::CompoundAssertEqual(expr1, expr2) => self.compile_compound_assert_equal(expr1, expr2),
             CodeElement::If(expr, body, else_body) => self.compile_if(expr, body, else_body),
+            CodeElement::Instruction(instr) => self.compile_instruction(instr),
             _ => todo!(),
         }
     }
