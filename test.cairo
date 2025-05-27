@@ -1,5 +1,8 @@
-
 func main(){
-    let x = 10;
-    return x*x;
+    local x = 10;
+    return square(x);
+}
+
+func square(n){
+    return n*n;
 }

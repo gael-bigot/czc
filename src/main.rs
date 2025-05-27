@@ -12,6 +12,7 @@ extern crate ebnf;
 
 fn run(input: &str, file_name: &str) {
     
+    
     let (tokens, errors) = lexer::lex(input, file_name);
     if errors > 0 {
         panic!("Lexing failed with {} errors", errors);
@@ -25,16 +26,44 @@ fn run(input: &str, file_name: &str) {
     let mut assembler = assembler::Compiler::new();
     assembler.casm = casm;
     assembler.resolve_calls();
-    //for instruction in assembler.casm.clone() {
-    //    println!("{:?}", instruction);
-    //}
+    for instruction in assembler.casm.clone() {
+        println!("{:?}", instruction);
+    }
     
     assembler.build_instructions();
-    // for instruction in assembler.instructions.clone() {
-    //     println!("{:?}", instruction);
-    // }
+    for instr in assembler.instructions.clone() {
+        println!("{:?}", instr);
+    }
+    for instruction in assembler.instructions.clone() {
+        let (bytes, imm) = instruction.to_bytes();
+        println!("{:#x}", bytes);
+        if let Some(imm) = imm {
+            println!("{:#x}", imm);
+        }
+    }
     let json = assembler.to_json();
     println!("{}", json);
+    
+    /*
+    let instr = assembler::Instruction{
+        offdst: 2,
+        offop0: -1,
+        offop1: -2,
+        imm: None,
+        dst: 1,
+        op0: 1,
+        op1: 2,
+        res: 2,
+        pc_update: 0,
+        ap_update: 2,
+        opcode: 4,
+    };
+    let (bytes, imm) = instr.to_bytes();
+    println!("{:#x}", bytes);
+    if let Some(imm) = imm {
+        println!("{:#x}", imm);
+    }
+    */
 }
 
 fn from_file(path: &str) {

@@ -36,7 +36,7 @@ impl Compiler {
             std::mem::swap(&mut left, &mut right);
         }
         self.casm_instructions.push(CasmInstruction::Add {
-            left: Operand::DerefAp(0),
+            left: Operand::DerefFp(self.ap_minus_fp),
             op1: left,
             op2: right,
         });
@@ -49,7 +49,7 @@ impl Compiler {
         let right = self.compile_expr(*expr.right.unwrap());
         self.casm_instructions.push(CasmInstruction::Add {
             left: left,
-            op1: Operand::DerefAp(0),
+            op1: Operand::DerefFp(self.ap_minus_fp),
             op2: right,
         });
         self.ap_minus_fp += 1;
@@ -65,7 +65,7 @@ impl Compiler {
             std::mem::swap(&mut left, &mut right);
         }
         self.casm_instructions.push(CasmInstruction::Mul {
-            left: Operand::DerefAp(0),
+            left: Operand::DerefFp(self.ap_minus_fp),
             op1: left,
             op2: right,
         });
@@ -148,7 +148,7 @@ impl Compiler {
         }
     }
 
-    fn compile_reference(&mut self, ident: Identifier, expr: Expr) {
+    fn compile_local_var(&mut self, ident: Identifier, expr: Expr) {
         let value = self.compile_expr(expr);
         match value {
             Operand::Int(n) => {
@@ -175,7 +175,7 @@ impl Compiler {
         match value {
             Operand::Int(n) => {
                 let instr = CasmInstruction::Set {
-                    left: Operand::DerefFp(self.ap_minus_fp),
+                    left: Operand::DerefAp(0),
                     op: Operand::Int(n),
                     incr_ap: true,
                 };
@@ -184,7 +184,7 @@ impl Compiler {
             }
             Operand::DerefFp(offset) => {
                 let instr = CasmInstruction::Set {
-                    left: Operand::DerefFp(self.ap_minus_fp),
+                    left: Operand::DerefAp(0),
                     op: Operand::DerefFp(offset),
                     incr_ap: true,
                 };
@@ -193,7 +193,7 @@ impl Compiler {
             }
             Operand::DerefAp(offset) => {
                 let instr = CasmInstruction::Set {
-                    left: Operand::DerefFp(self.ap_minus_fp),
+                    left: Operand::DerefAp(0),
                     op: Operand::DerefAp(offset),
                     incr_ap: true,
                 };
@@ -256,6 +256,25 @@ impl Compiler {
                 self.casm_instructions[instruction_number as usize - 1] = CasmInstruction::JmpIfNeq(else_body_size+1, Operand::DerefFp(offset));
                 
             }
+            Operand::DerefAp(offset) => {
+                let instr = CasmInstruction::JmpIfNeq(0, Operand::DerefFp(offset));
+                self.casm_instructions.push(instr);
+                // saving state
+                let instruction_number = self.casm_instructions.len() as i32;
+                let current_ap_minus_fp = self.ap_minus_fp;
+                // compiling else body
+                else_body.iter().for_each(|code_element| {
+                    self.compile_code_element(code_element.clone());
+                });
+                self.ap_minus_fp = current_ap_minus_fp;
+                let else_body_size = self.casm_instructions.len() as i32 - instruction_number;
+                // compiling else body
+                body.iter().for_each(|code_element| {
+                    self.compile_code_element(code_element.clone());
+                });
+                // updating jump instruction
+                self.casm_instructions[instruction_number as usize - 1] = CasmInstruction::JmpIfNeq(else_body_size+1, Operand::DerefFp(offset));
+            }
             _ => todo!(),
         }
     }
@@ -269,7 +288,7 @@ impl Compiler {
 
     pub fn compile_code_element(&mut self, code_element: CodeElement) {
         match code_element {
-            CodeElement::Reference(ident, expr) => self.compile_reference(ident, expr),
+            CodeElement::LocalVar(ident, expr) => self.compile_local_var(ident, expr),
             CodeElement::Return(expr) => self.compile_return(expr),
             CodeElement::Function(name, args, body) => self.compile_function(name, args, body),
             CodeElement::CompoundAssertEqual(expr1, expr2) => self.compile_compound_assert_equal(expr1, expr2),

@@ -42,8 +42,6 @@ impl Instruction{
 
 
 
-
-
 pub fn build_instruction(instruction: CasmInstruction) -> Instruction {
     match instruction {
         CasmInstruction::CallRel(offset) => {
@@ -193,6 +191,15 @@ pub fn build_instruction(instruction: CasmInstruction) -> Instruction {
     }
 }
 
+
+fn nops(i: CasmInstruction) -> u64{
+    let bytecode = build_instruction(i);
+    if let Some(imm) = bytecode.imm {
+        return 2;
+    }
+    return 1;
+}
+
 pub struct Compiler{
     pub casm: Vec<CasmInstruction>,
     pub instructions: Vec<Instruction>,
@@ -204,6 +211,7 @@ impl Compiler{
         Self { casm: Vec::new(), instructions: Vec::new(), function_adresses: HashMap::new() }
     }
 
+
     pub fn resolve_calls(&mut self) {
         let mut new = Vec::new();
         let mut instruction_number = 0;
@@ -213,8 +221,11 @@ impl Compiler{
                 CasmInstruction::Label(label) => {
                     self.function_adresses.insert(label, instruction_number);
                 }
+                CasmInstruction::Call(label) => {
+                    instruction_number += 2;
+                }
                 _ => {
-                    instruction_number += 1;
+                    instruction_number += nops(instruction.clone());
                 }
             }
         }
@@ -223,12 +234,12 @@ impl Compiler{
             match instruction {
                 CasmInstruction::Call(label) => {
                     new.push(CasmInstruction::CallRel(self.function_adresses[&label] - instruction_number));
-                    instruction_number += 1;
+                    instruction_number += 2;
                 }
                 CasmInstruction::Label(label) => {}
                 _ => {
-                    new.push(instruction);
-                    instruction_number += 1;
+                    new.push(instruction.clone());
+                    instruction_number += nops(instruction);
                 }
             }
         }

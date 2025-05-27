@@ -485,13 +485,13 @@ impl Parser {
                 CodeElement::Function(ident, args, body)
             }
 
-            crate::lexer::TokenType::Let => {
+            crate::lexer::TokenType::Local => {
                 self.advance();
                 let ident = self.identifier();
-                self.consume(crate::lexer::TokenType::Equal, "Expected '=' after let");
+                self.consume(crate::lexer::TokenType::Equal, "Expected '=' after local");
                 let expr = self.expression();
-                self.consume(crate::lexer::TokenType::Semicolon, "Expected ';' after let");
-                CodeElement::Reference(ident, expr)
+                self.consume(crate::lexer::TokenType::Semicolon, "Expected ';' after local");
+                CodeElement::LocalVar(ident, expr)
             }
 
             crate::lexer::TokenType::Assert => {

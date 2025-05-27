@@ -101,6 +101,7 @@ pub enum CodeElement {
     Instruction(Instruction),
     Const,
     Reference(Identifier, Expr),
+    LocalVar(Identifier, Expr),
     TempVar,
     CompoundAssertEqual(Expr, Expr),
     StaticAssert,
@@ -472,6 +473,11 @@ impl CodeElement {
             CodeElement::Const => write!(f, "Const"),
             CodeElement::Reference(ident, expr) => {
                 write!(f, "Reference '{}' = ", ident.token.lexeme)?;
+                writeln!(f)?;
+                expr.fmt_with_indent(f, indent + 1)
+            }
+            CodeElement::LocalVar(ident, expr) => {
+                write!(f, "LocalVar '{}' = ", ident.token.lexeme)?;
                 writeln!(f)?;
                 expr.fmt_with_indent(f, indent + 1)
             }
