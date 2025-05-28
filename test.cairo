@@ -1,8 +1,7 @@
 func main(){
+    alloc_locals;
     local x = 10;
-    return square(x);
-}
-
-func square(n){
-    return n*n;
+    local y = 20;
+    local z = (x+3)*(y+4);
+    ret;
 }

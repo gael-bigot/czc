@@ -5,7 +5,8 @@ pub enum CasmInstruction {
     Ret,
     Call(String),
     CallRel(u64),
-    IncrFp(i32),
+    IncrFp(u64),
+    IncrAp(u64),
     Label(String),
     Set{
         left : Operand,
@@ -65,6 +66,7 @@ impl Debug for CasmInstruction {
             CasmInstruction::Call(label) => write!(f, "call {};", label),
             CasmInstruction::CallRel(offset) => write!(f, "call rel {};", offset),
             CasmInstruction::IncrFp(n) => write!(f, "fp += {};", n),
+            CasmInstruction::IncrAp(n) => write!(f, "ap += {};", n),
             CasmInstruction::Label(label) => write!(f, "{}:", label),
             CasmInstruction::Set { left, op , incr_ap} => {
                 write!(f, "{} = {}{}", left, op, if *incr_ap { ", ap++;" } else { ";" })

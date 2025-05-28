@@ -5,14 +5,15 @@ use std::collections::HashMap;
 pub struct Compiler {
     code_elements: Vec<CodeElement>,
     casm_instructions: Vec<CasmInstruction>,
-    ap_minus_fp: i32,
     local_variables: HashMap<String, i32>,
+    size_of_locals: u64,
+    current_local_offset: u64,
     //current_function_name: Option<String>,
 }
 
 impl Compiler {
     pub fn new(code_elements: Vec<CodeElement>) -> Self {
-        Self { code_elements, casm_instructions: Vec::new(), ap_minus_fp: 0, local_variables: HashMap::new() }
+        Self { code_elements, casm_instructions: Vec::new(), local_variables: HashMap::new(), size_of_locals: 0, current_local_offset: 0 }
     }
 
     pub fn compile(&mut self) -> Vec<CasmInstruction> {
@@ -36,12 +37,11 @@ impl Compiler {
             std::mem::swap(&mut left, &mut right);
         }
         self.casm_instructions.push(CasmInstruction::Add {
-            left: Operand::DerefFp(self.ap_minus_fp),
+            left: Operand::DerefAp(0),
             op1: left,
             op2: right,
         });
-        self.ap_minus_fp += 1;
-        Operand::DerefFp(self.ap_minus_fp-1)
+        Operand::DerefAp(-1)
     }
 
     fn compile_sub(&mut self, expr: Expr) -> Operand {
@@ -49,11 +49,10 @@ impl Compiler {
         let right = self.compile_expr(*expr.right.unwrap());
         self.casm_instructions.push(CasmInstruction::Add {
             left: left,
-            op1: Operand::DerefFp(self.ap_minus_fp),
+            op1: Operand::DerefAp(0),
             op2: right,
         });
-        self.ap_minus_fp += 1;
-        Operand::DerefFp(self.ap_minus_fp-1)
+        Operand::DerefAp(-1)
     }
 
     fn compile_mul(&mut self, expr: Expr) -> Operand {
@@ -65,12 +64,11 @@ impl Compiler {
             std::mem::swap(&mut left, &mut right);
         }
         self.casm_instructions.push(CasmInstruction::Mul {
-            left: Operand::DerefFp(self.ap_minus_fp),
+            left: Operand::DerefAp(0),
             op1: left,
             op2: right,
         });
-        self.ap_minus_fp += 1;
-        Operand::DerefFp(self.ap_minus_fp-1)
+        Operand::DerefAp(-1)
     }
 
     fn compile_function_call(&mut self, expr: Expr) -> Operand {
@@ -86,12 +84,11 @@ impl Compiler {
         for arg_ref in arg_refs {
             // once args are calculated, we can push them to stack
             let instr = CasmInstruction::Set {
-                left: Operand::DerefFp(self.ap_minus_fp),
+                left: Operand::DerefAp(0),
                 op: arg_ref,
                 incr_ap: true,
             };
             self.casm_instructions.push(instr);
-            self.ap_minus_fp += 1;
         }
         /*
         // pushin pc to top of Stack
@@ -110,7 +107,6 @@ impl Compiler {
         // calling function
         let instr = CasmInstruction::Call(func_name);
         self.casm_instructions.push(instr);
-        self.ap_minus_fp = 0;
         // return value is at top of stack
         Operand::DerefAp(-1)
     }
@@ -136,7 +132,16 @@ impl Compiler {
 
     pub fn compile_function(&mut self, name: Identifier, args: Vec<Identifier>, body: Vec<CodeElement>) {
         self.local_variables.clear();
-        self.ap_minus_fp = 0;
+        self.current_local_offset = 0;
+        // counting number of local declarations
+        for code_element in body.clone() {
+            match code_element {
+                CodeElement::LocalVar(ident, expr) => {
+                    self.size_of_locals += 1;
+                }
+                _ => {}
+            }
+        }
 
         self.casm_instructions.push(CasmInstruction::Label(name.token.lexeme));
 
@@ -148,23 +153,21 @@ impl Compiler {
         }
     }
 
-    fn compile_local_var(&mut self, ident: Identifier, expr: Expr) {
-        let value = self.compile_expr(expr);
-        match value {
-            Operand::Int(n) => {
+    fn compile_local_var(&mut self, ident: Identifier, expr: Option<Expr>) {
+        self.local_variables.insert(ident.token.lexeme, self.current_local_offset as i32);
+        self.current_local_offset += 1;
+        
+        match expr {
+            Some(expr) => {
+                let value = self.compile_expr(expr);
                 let instr = CasmInstruction::Set {
-                    left: Operand::DerefFp(self.ap_minus_fp),
-                    op: Operand::Int(n),
-                    incr_ap: true,
+                    left: Operand::DerefFp(self.current_local_offset as i32 -1),
+                    op: value,
+                    incr_ap: false,
                 };
                 self.casm_instructions.push(instr);
-                self.ap_minus_fp += 1;
-                self.local_variables.insert(ident.token.lexeme, self.ap_minus_fp-1);
             }
-            Operand::DerefFp(offset) => {
-                self.local_variables.insert(ident.token.lexeme, offset);
-            }
-            _ => todo!(),
+            None => {}
         }
     }
 
@@ -180,7 +183,6 @@ impl Compiler {
                     incr_ap: true,
                 };
                 self.casm_instructions.push(instr);
-                self.ap_minus_fp += 1;
             }
             Operand::DerefFp(offset) => {
                 let instr = CasmInstruction::Set {
@@ -189,7 +191,6 @@ impl Compiler {
                     incr_ap: true,
                 };
                 self.casm_instructions.push(instr);
-                self.ap_minus_fp += 1;
             }
             Operand::DerefAp(offset) => {
                 let instr = CasmInstruction::Set {
@@ -198,7 +199,6 @@ impl Compiler {
                     incr_ap: true,
                 };
                 self.casm_instructions.push(instr);
-                self.ap_minus_fp += 1;
             }
             _ => todo!(),
         }
@@ -241,12 +241,10 @@ impl Compiler {
                 self.casm_instructions.push(instr);
                 // saving state
                 let instruction_number = self.casm_instructions.len() as i32;
-                let current_ap_minus_fp = self.ap_minus_fp;
                 // compiling else body
                 else_body.iter().for_each(|code_element| {
                     self.compile_code_element(code_element.clone());
                 });
-                self.ap_minus_fp = current_ap_minus_fp;
                 let else_body_size = self.casm_instructions.len() as i32 - instruction_number;
                 // compiling else body
                 body.iter().for_each(|code_element| {
@@ -261,12 +259,10 @@ impl Compiler {
                 self.casm_instructions.push(instr);
                 // saving state
                 let instruction_number = self.casm_instructions.len() as i32;
-                let current_ap_minus_fp = self.ap_minus_fp;
                 // compiling else body
                 else_body.iter().for_each(|code_element| {
                     self.compile_code_element(code_element.clone());
                 });
-                self.ap_minus_fp = current_ap_minus_fp;
                 let else_body_size = self.casm_instructions.len() as i32 - instruction_number;
                 // compiling else body
                 body.iter().for_each(|code_element| {
@@ -286,6 +282,10 @@ impl Compiler {
         }
     }
 
+    fn compile_alloc_locals(&mut self) {
+        self.casm_instructions.push(CasmInstruction::IncrAp(self.size_of_locals));
+    }
+
     pub fn compile_code_element(&mut self, code_element: CodeElement) {
         match code_element {
             CodeElement::LocalVar(ident, expr) => self.compile_local_var(ident, expr),
@@ -294,6 +294,7 @@ impl Compiler {
             CodeElement::CompoundAssertEqual(expr1, expr2) => self.compile_compound_assert_equal(expr1, expr2),
             CodeElement::If(expr, body, else_body) => self.compile_if(expr, body, else_body),
             CodeElement::Instruction(instr) => self.compile_instruction(instr),
+            CodeElement::AllocLocals => self.compile_alloc_locals(),
             _ => todo!(),
         }
     }

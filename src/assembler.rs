@@ -187,6 +187,20 @@ pub fn build_instruction(instruction: CasmInstruction) -> Instruction {
             let opcode = 2;
             Instruction{offdst, offop0, offop1, imm, dst, op0, op1, res, pc_update, ap_update, opcode}
         }
+        CasmInstruction::IncrAp(n) => {
+            let offdst = -1;
+            let offop0 = -1;
+            let offop1 = 1;
+            let imm = Some(n);
+            let dst = 1;
+            let op0 = 1;
+            let op1 = 1;
+            let res = 0;
+            let pc_update = 0;
+            let ap_update = 1;
+            let opcode = 0;
+            Instruction{offdst, offop0, offop1, imm, dst, op0, op1, res, pc_update, ap_update, opcode}
+        }
         _ => todo!(),
     }
 }

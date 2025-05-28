@@ -488,10 +488,15 @@ impl Parser {
             crate::lexer::TokenType::Local => {
                 self.advance();
                 let ident = self.identifier();
-                self.consume(crate::lexer::TokenType::Equal, "Expected '=' after local");
-                let expr = self.expression();
-                self.consume(crate::lexer::TokenType::Semicolon, "Expected ';' after local");
-                CodeElement::LocalVar(ident, expr)
+                if self.match_token(crate::lexer::TokenType::Equal) {
+                    let expr = self.expression();
+                    self.consume(crate::lexer::TokenType::Semicolon, "Expected ';' after local");
+                    CodeElement::LocalVar(ident, Some(expr))
+                } else {
+                    self.consume(crate::lexer::TokenType::Semicolon, "Expected ';' after local");
+                    CodeElement::LocalVar(ident, None)
+                }
+                
             }
 
             crate::lexer::TokenType::Assert => {
@@ -508,6 +513,12 @@ impl Parser {
                 let expr = self.expression();
                 self.consume(crate::lexer::TokenType::Semicolon, "Expected ';' after return");
                 CodeElement::Return(expr)
+            }
+
+            crate::lexer::TokenType::AllocLocals => {
+                self.advance();
+                self.consume(crate::lexer::TokenType::Semicolon, "Expected ';' after alloc_locals");
+                CodeElement::AllocLocals
             }
 
             _ => {
