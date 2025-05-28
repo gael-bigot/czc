@@ -58,6 +58,20 @@ pub fn build_instruction(instruction: CasmInstruction) -> Instruction {
             let opcode = 1;
             Instruction{offdst, offop0, offop1, imm, dst, op0, op1, res, pc_update, ap_update, opcode}
         }
+        CasmInstruction::CallAbs(address) => {
+            let offdst = 0;
+            let offop0 = 1;
+            let offop1 = 1;
+            let imm = Some(address as u64);
+            let dst = 0;
+            let op0 = 0;
+            let op1 = 1;
+            let res = 0;
+            let pc_update = 1;
+            let ap_update = 0;
+            let opcode = 1;
+            Instruction{offdst, offop0, offop1, imm, dst, op0, op1, res, pc_update, ap_update, opcode}
+        }
         CasmInstruction::Set { left, op, incr_ap } => {
             let offdst = match left {
                 Operand::DerefFp(offset) => offset,
@@ -247,7 +261,7 @@ impl Compiler{
         for instruction in self.casm.clone() {
             match instruction {
                 CasmInstruction::Call(label) => {
-                    new.push(CasmInstruction::CallRel(self.function_adresses[&label] - instruction_number));
+                    new.push(CasmInstruction::CallAbs(self.function_adresses[&label]));
                     instruction_number += 2;
                 }
                 CasmInstruction::Label(label) => {}

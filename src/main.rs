@@ -26,20 +26,24 @@ fn run(input: &str, file_name: &str) {
     let mut assembler = assembler::Compiler::new();
     assembler.casm = casm;
     assembler.resolve_calls();
-    for instruction in assembler.casm.clone() {
-        println!("{:?}", instruction);
+    for (i, instruction) in assembler.casm.clone().iter().enumerate() {
+        println!("{} {:?}", i, instruction);
     }
     
     assembler.build_instructions();
-    for instr in assembler.instructions.clone() {
-        println!("{:?}", instr);
-    }
+    //for instr in assembler.instructions.clone() {
+    //    println!("{:?}", instr);
+    //}
+    let mut line = 0;
     for instruction in assembler.instructions.clone() {
         let (bytes, imm) = instruction.to_bytes();
-        println!("{:#x}", bytes);
+        println!("{} {:#x}", line, bytes);
         if let Some(imm) = imm {
-            println!("{:#x}", imm);
+            line += 1;
+            println!("{} {:#x}", line, imm);
+            
         }
+        line += 1;
     }
     let json = assembler.to_json();
     println!("{}", json);
