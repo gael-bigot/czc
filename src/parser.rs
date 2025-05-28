@@ -304,7 +304,15 @@ impl Parser {
         let token = self.peek();
         if self.check(crate::lexer::TokenType::LParen) {
             let args = self.paren_arglist();
-            //println!("args are :{:?}", args);
+            // in the case of a single expression, we return it directly
+            if args.len() == 1 {
+                match args[0].clone() {
+                    ExprAssignment::Expr(expr) => {
+                        return expr;
+                    }
+                    _ => {},
+                }
+            }
             Expr::new_tuple_or_paren(args)
         } else {
             self.advance();
