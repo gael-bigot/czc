@@ -48,7 +48,8 @@ pub fn build_instruction(instruction: CasmInstruction) -> Instruction {
             let offdst = 0;
             let offop0 = 1;
             let offop1 = 1;
-            let imm = Some(offset as u64);
+            let imm = if offset < 0 {0x7FFFFFFF + offset} else {offset};
+            let imm = Some(imm as u64);
             let dst = 0;
             let op0 = 0;
             let op1 = 1;
@@ -228,13 +229,13 @@ fn nops(i: CasmInstruction) -> u64{
     return 1;
 }
 
-pub struct Compiler{
+pub struct Assembler{
     pub casm: Vec<CasmInstruction>,
     pub instructions: Vec<Instruction>,
     pub function_adresses: HashMap<String, u64>,
 }
 
-impl Compiler{
+impl Assembler{
     pub fn new() -> Self {
         Self { casm: Vec::new(), instructions: Vec::new(), function_adresses: HashMap::new() }
     }
@@ -261,7 +262,7 @@ impl Compiler{
         for instruction in self.casm.clone() {
             match instruction {
                 CasmInstruction::Call(label) => {
-                    new.push(CasmInstruction::CallAbs(self.function_adresses[&label]));
+                    new.push(CasmInstruction::CallRel(self.function_adresses[&label] as i32  - instruction_number as i32));
                     instruction_number += 2;
                 }
                 CasmInstruction::Label(label) => {}
@@ -303,7 +304,7 @@ impl Compiler{
             data["identifiers"][label2.clone()]["type"] = json::JsonValue::from("function");
         }
         data["main_scope"] = json::JsonValue::from("__main__");
-        data["prime"] = json::JsonValue::from("0x800000000000011000000000000000000000000000000000000000000000001");
+        data["prime"] = json::JsonValue::from("0x7fffffff");
         data["reference_manager"] = json::JsonValue::new_object();
         data["reference_manager"]["references"] = json::JsonValue::new_array();
         data.to_string()

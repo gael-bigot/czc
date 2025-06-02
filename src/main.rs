@@ -23,7 +23,7 @@ fn run(input: &str, file_name: &str) {
     //code_elements.iter().for_each(|code_element| println!("{:?}", code_element));
     let mut compiler = lower_to_casm::Compiler::new(code_elements);
     let casm = compiler.compile();
-    let mut assembler = assembler::Compiler::new();
+    let mut assembler = assembler::Assembler::new();
     assembler.casm = casm;
     assembler.resolve_calls();
     for (i, instruction) in assembler.casm.clone().iter().enumerate() {

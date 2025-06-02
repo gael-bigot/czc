@@ -4,7 +4,7 @@ use std::{fmt::{self, Debug, Display}};
 pub enum CasmInstruction {
     Ret,
     Call(String),
-    CallRel(u64),
+    CallRel(i32),
     CallAbs(u64),
     IncrFp(u64),
     IncrAp(u64),
