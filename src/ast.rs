@@ -1,10 +1,10 @@
 use crate::lexer::Token;
-use std::{fmt::{self, Debug}};
+use std::fmt::{self, Debug};
 
 // Types
 
 #[derive(Clone)]
-pub enum Type{
+pub enum Type {
     Felt,
     CodeOffset,
     Pointer(Box<Type>),
@@ -42,7 +42,6 @@ pub enum ExprType {
     ErrorExpr,
 }
 
-
 #[derive(Clone)]
 pub struct Expr {
     pub token: Option<Token>,
@@ -55,8 +54,6 @@ pub struct Expr {
     pub brace_args: Vec<ExprAssignment>,
 }
 
-
-
 #[derive(Debug, Clone)]
 pub struct Identifier {
     pub token: Token,
@@ -68,7 +65,6 @@ pub enum ExprAssignment {
     Assign(Identifier, Expr),
 }
 
-
 // Instructions
 
 #[derive(Clone)]
@@ -77,7 +73,6 @@ pub struct Instruction {
     pub ident: Option<Identifier>,
     pub args: Vec<Expr>,
     pub increment_ap: bool,
-    
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -120,7 +115,6 @@ pub enum CodeElement {
     Import,
     AllocLocals,
 }
-
 
 impl Expr {
     pub fn new_error() -> Self {
@@ -187,7 +181,11 @@ impl Expr {
         }
     }
 
-    pub fn new_function_call(name: Identifier, paren_args: Vec<ExprAssignment>, brace_args: Vec<ExprAssignment>) -> Self {
+    pub fn new_function_call(
+        name: Identifier,
+        paren_args: Vec<ExprAssignment>,
+        brace_args: Vec<ExprAssignment>,
+    ) -> Self {
         Self {
             token: None,
             ident: Some(name),
@@ -227,8 +225,7 @@ impl Expr {
     }
 }
 
-impl Instruction{
-
+impl Instruction {
     pub fn new_unary(instruction_type: InstructionType, child: Expr, increment_ap: bool) -> Self {
         Self {
             instruction_type,
@@ -238,8 +235,13 @@ impl Instruction{
         }
     }
 
-    pub fn new_binary(instruction_type: InstructionType, left: Expr, right: Expr, increment_ap: bool) -> Self {
-        Self {      
+    pub fn new_binary(
+        instruction_type: InstructionType,
+        left: Expr,
+        right: Expr,
+        increment_ap: bool,
+    ) -> Self {
+        Self {
             instruction_type,
             ident: None,
             args: vec![left, right],
@@ -247,7 +249,11 @@ impl Instruction{
         }
     }
 
-    pub fn new_call(instruction_type: InstructionType, ident: Identifier, increment_ap: bool) -> Self {
+    pub fn new_call(
+        instruction_type: InstructionType,
+        ident: Identifier,
+        increment_ap: bool,
+    ) -> Self {
         Self {
             instruction_type,
             ident: Some(ident),
@@ -265,7 +271,11 @@ impl Instruction{
         }
     }
 
-    pub fn new_jmp_label(instruction_type: InstructionType, ident: Identifier, increment_ap: bool) -> Self {
+    pub fn new_jmp_label(
+        instruction_type: InstructionType,
+        ident: Identifier,
+        increment_ap: bool,
+    ) -> Self {
         Self {
             instruction_type,
             ident: Some(ident),
@@ -274,7 +284,12 @@ impl Instruction{
         }
     }
 
-    pub fn new_jmp_label_if(instruction_type: InstructionType, ident: Identifier, condition: Expr, increment_ap: bool) -> Self {
+    pub fn new_jmp_label_if(
+        instruction_type: InstructionType,
+        ident: Identifier,
+        condition: Expr,
+        increment_ap: bool,
+    ) -> Self {
         Self {
             instruction_type,
             ident: Some(ident),
@@ -282,7 +297,6 @@ impl Instruction{
             increment_ap,
         }
     }
-
 }
 
 impl Type {
@@ -331,7 +345,6 @@ impl Debug for Type {
     }
 }
 
-
 impl Debug for ExprAssignment {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.fmt_with_indent(f, 0)
@@ -341,9 +354,7 @@ impl Debug for ExprAssignment {
 impl ExprAssignment {
     fn fmt_with_indent(&self, f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
         match self {
-            ExprAssignment::Expr(expr) => {
-                expr.fmt_with_indent(f, indent)
-            }
+            ExprAssignment::Expr(expr) => expr.fmt_with_indent(f, indent),
             ExprAssignment::Assign(ident, expr) => {
                 write!(f, "{:indent$}", "", indent = indent * 2)?;
                 write!(f, "Assign '{}' = ", ident.token.lexeme)?;
@@ -354,10 +365,6 @@ impl ExprAssignment {
     }
 }
 
-
-
-
-
 impl Debug for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.fmt_with_indent(f, 0)
@@ -367,10 +374,10 @@ impl Debug for Expr {
 impl Expr {
     fn fmt_with_indent(&self, f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
         write!(f, "{:indent$}", "", indent = indent * 2)?;
-        
+
         // Print the expression type
         write!(f, "{:?}", self.expr_type)?;
-        
+
         // Print token if present
         if let Some(token) = &self.token {
             write!(f, " '{}'", token.lexeme)?;
@@ -381,16 +388,20 @@ impl Expr {
             write!(f, " '{}'", ident.token.lexeme)?;
         }
 
-        let has_children = self.left.is_some() || self.right.is_some() || !self.paren_args.is_empty() || !self.brace_args.is_empty() || self.type_arg.is_some();
+        let has_children = self.left.is_some()
+            || self.right.is_some()
+            || !self.paren_args.is_empty()
+            || !self.brace_args.is_empty()
+            || self.type_arg.is_some();
         if has_children {
             writeln!(f)?;
-            
+
             // Print left child if present
             if let Some(left) = &self.left {
                 left.fmt_with_indent(f, indent + 1)?;
                 writeln!(f)?;
             }
-            
+
             // Print right child if present
             if let Some(right) = &self.right {
                 right.fmt_with_indent(f, indent + 1)?;
@@ -402,7 +413,7 @@ impl Expr {
                 type_arg.fmt_with_indent(f, indent + 1)?;
                 writeln!(f)?;
             }
-            
+
             // Print args if present
             for (i, arg) in self.paren_args.iter().enumerate() {
                 arg.fmt_with_indent(f, indent + 1)?;
@@ -415,11 +426,10 @@ impl Expr {
                 }
             }
         }
-        
+
         Ok(())
     }
 }
-
 
 impl Debug for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -569,6 +579,3 @@ impl CodeElement {
         }
     }
 }
-
-
-

@@ -1,11 +1,9 @@
 use crate::{ast::*, casm::*};
-use std::{collections::HashMap};
-use chumsky::error;
 use json;
-
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
-pub struct Instruction{
+pub struct Instruction {
     pub offdst: i32,
     pub offop0: i32,
     pub offop1: i32,
@@ -17,10 +15,9 @@ pub struct Instruction{
     pub pc_update: u8,
     pub ap_update: u8,
     pub opcode: u8,
-    }
+}
 
-
-impl Instruction{
+impl Instruction {
     pub fn to_bytes(&self) -> (u64, Option<u64>) {
         let mut res: u64 = 0;
         res += (self.offdst + 0x8000) as u64;
@@ -40,15 +37,17 @@ impl Instruction{
     }
 }
 
-
-
 pub fn build_instruction(instruction: CasmInstruction) -> Instruction {
     match instruction {
         CasmInstruction::CallRel(offset) => {
             let offdst = 0;
             let offop0 = 1;
             let offop1 = 1;
-            let imm = if offset < 0 {0x7FFFFFFF + offset} else {offset};
+            let imm = if offset < 0 {
+                0x7FFFFFFF + offset
+            } else {
+                offset
+            };
             let imm = Some(imm as u64);
             let dst = 0;
             let op0 = 0;
@@ -57,7 +56,19 @@ pub fn build_instruction(instruction: CasmInstruction) -> Instruction {
             let pc_update = 2;
             let ap_update = 0;
             let opcode = 1;
-            Instruction{offdst, offop0, offop1, imm, dst, op0, op1, res, pc_update, ap_update, opcode}
+            Instruction {
+                offdst,
+                offop0,
+                offop1,
+                imm,
+                dst,
+                op0,
+                op1,
+                res,
+                pc_update,
+                ap_update,
+                opcode,
+            }
         }
         CasmInstruction::CallAbs(address) => {
             let offdst = 0;
@@ -71,7 +82,19 @@ pub fn build_instruction(instruction: CasmInstruction) -> Instruction {
             let pc_update = 1;
             let ap_update = 0;
             let opcode = 1;
-            Instruction{offdst, offop0, offop1, imm, dst, op0, op1, res, pc_update, ap_update, opcode}
+            Instruction {
+                offdst,
+                offop0,
+                offop1,
+                imm,
+                dst,
+                op0,
+                op1,
+                res,
+                pc_update,
+                ap_update,
+                opcode,
+            }
         }
         CasmInstruction::Set { left, op, incr_ap } => {
             let offdst = match left {
@@ -104,7 +127,19 @@ pub fn build_instruction(instruction: CasmInstruction) -> Instruction {
             let pc_update = 0;
             let ap_update = if incr_ap { 2 } else { 0 };
             let opcode = 4;
-            Instruction{offdst, offop0, offop1, imm, dst, op0, op1, res, pc_update, ap_update, opcode}
+            Instruction {
+                offdst,
+                offop0,
+                offop1,
+                imm,
+                dst,
+                op0,
+                op1,
+                res,
+                pc_update,
+                ap_update,
+                opcode,
+            }
         }
         CasmInstruction::Add { left, op1, op2 } => {
             let offdst = match left {
@@ -145,7 +180,19 @@ pub fn build_instruction(instruction: CasmInstruction) -> Instruction {
             let pc_update = 0;
             let ap_update = 2;
             let opcode = 4;
-            Instruction{offdst, offop0, offop1, imm, dst, op0, op1, res, pc_update, ap_update, opcode}
+            Instruction {
+                offdst,
+                offop0,
+                offop1,
+                imm,
+                dst,
+                op0,
+                op1,
+                res,
+                pc_update,
+                ap_update,
+                opcode,
+            }
         }
         CasmInstruction::Mul { left, op1, op2 } => {
             let offdst = match left {
@@ -186,7 +233,19 @@ pub fn build_instruction(instruction: CasmInstruction) -> Instruction {
             let pc_update = 0;
             let ap_update = 2;
             let opcode = 4;
-            Instruction{offdst, offop0, offop1, imm, dst, op0, op1, res, pc_update, ap_update, opcode}
+            Instruction {
+                offdst,
+                offop0,
+                offop1,
+                imm,
+                dst,
+                op0,
+                op1,
+                res,
+                pc_update,
+                ap_update,
+                opcode,
+            }
         }
         CasmInstruction::Ret => {
             let offdst = -2;
@@ -200,7 +259,19 @@ pub fn build_instruction(instruction: CasmInstruction) -> Instruction {
             let pc_update = 1;
             let ap_update = 0;
             let opcode = 2;
-            Instruction{offdst, offop0, offop1, imm, dst, op0, op1, res, pc_update, ap_update, opcode}
+            Instruction {
+                offdst,
+                offop0,
+                offop1,
+                imm,
+                dst,
+                op0,
+                op1,
+                res,
+                pc_update,
+                ap_update,
+                opcode,
+            }
         }
         CasmInstruction::IncrAp(n) => {
             let offdst = -1;
@@ -214,14 +285,95 @@ pub fn build_instruction(instruction: CasmInstruction) -> Instruction {
             let pc_update = 0;
             let ap_update = 1;
             let opcode = 0;
-            Instruction{offdst, offop0, offop1, imm, dst, op0, op1, res, pc_update, ap_update, opcode}
+            Instruction {
+                offdst,
+                offop0,
+                offop1,
+                imm,
+                dst,
+                op0,
+                op1,
+                res,
+                pc_update,
+                ap_update,
+                opcode,
+            }
+        }
+        CasmInstruction::JmpIfNeqRel(offset, op) => {
+            let offdst = match op {
+                Operand::DerefFp(offset) => offset,
+                Operand::DerefAp(offset) => offset,
+                _ => unreachable!(),
+            };
+            let offop0 = -1;
+            let offop1 = 1;
+            let imm = if offset < 0 {
+                0x7FFFFFFF + offset
+            } else {
+                offset
+            };
+            let imm = Some(imm as u64);
+            let dst = match op {
+                Operand::DerefFp(offset) => 2,
+                Operand::DerefAp(offset) => 4,
+                _ => unreachable!(),
+            };
+            let op0 = 1;
+            let op1 = 0;
+            let res = 0;
+            let pc_update = 4;
+            let ap_update = 0;
+            let opcode = 0;
+            Instruction {
+                offdst,
+                offop0,
+                offop1,
+                imm,
+                dst,
+                op0,
+                op1,
+                res,
+                pc_update,
+                ap_update,
+                opcode,
+            }
+        }
+        CasmInstruction::JmpRel(offset) => {
+            let offdst = 0;
+            let offop0 = 0;
+            let offop1 = 1;
+            let imm = if offset < 0 {
+                0x7FFFFFFF + offset
+            } else {
+                offset
+            };
+            let imm = Some(imm as u64);
+            let dst = 0;
+            let op0 = 1;
+            let op1 = 1;
+            let res = 0;
+            let pc_update = 2;
+            let ap_update = 0;
+            let opcode = 0;
+            Instruction {
+                offdst,
+                offop0,
+                offop1,
+                imm,
+                dst,
+                op0,
+                op1,
+                res,
+                pc_update,
+                ap_update,
+                opcode,
+            }
         }
         _ => todo!(),
     }
 }
 
-
-fn nops(i: CasmInstruction) -> u64{
+fn nops(i: CasmInstruction) -> u64 {
     let bytecode = build_instruction(i);
     if let Some(imm) = bytecode.imm {
         return 2;
@@ -229,19 +381,22 @@ fn nops(i: CasmInstruction) -> u64{
     return 1;
 }
 
-pub struct Assembler{
+pub struct Assembler {
     pub casm: Vec<CasmInstruction>,
     pub instructions: Vec<Instruction>,
     pub function_adresses: HashMap<String, u64>,
 }
 
-impl Assembler{
+impl Assembler {
     pub fn new() -> Self {
-        Self { casm: Vec::new(), instructions: Vec::new(), function_adresses: HashMap::new() }
+        Self {
+            casm: Vec::new(),
+            instructions: Vec::new(),
+            function_adresses: HashMap::new(),
+        }
     }
 
-
-    pub fn resolve_calls(&mut self) {
+    pub fn resolve_jumps(&mut self) {
         let mut new = Vec::new();
         let mut instruction_number = 0;
         //let mut function_adresses = HashMap::new();
@@ -253,6 +408,12 @@ impl Assembler{
                 CasmInstruction::Call(label) => {
                     instruction_number += 2;
                 }
+                CasmInstruction::Jmp(label) => {
+                    instruction_number += 2;
+                }
+                CasmInstruction::JmpIfNeq(label, op) => {
+                    instruction_number += 2;
+                }
                 _ => {
                     instruction_number += nops(instruction.clone());
                 }
@@ -262,10 +423,25 @@ impl Assembler{
         for instruction in self.casm.clone() {
             match instruction {
                 CasmInstruction::Call(label) => {
-                    new.push(CasmInstruction::CallRel(self.function_adresses[&label] as i32  - instruction_number as i32));
+                    new.push(CasmInstruction::CallRel(
+                        self.function_adresses[&label] as i32 - instruction_number as i32,
+                    ));
                     instruction_number += 2;
                 }
                 CasmInstruction::Label(label) => {}
+                CasmInstruction::Jmp(label) => {
+                    new.push(CasmInstruction::JmpRel(
+                        self.function_adresses[&label] as i32 - instruction_number as i32,
+                    ));
+                    instruction_number += 2;
+                }
+                CasmInstruction::JmpIfNeq(label, op) => {
+                    new.push(CasmInstruction::JmpIfNeqRel(
+                        self.function_adresses[&label] as i32 - instruction_number as i32,
+                        op,
+                    ));
+                    instruction_number += 2;
+                }
                 _ => {
                     new.push(instruction.clone());
                     instruction_number += nops(instruction);

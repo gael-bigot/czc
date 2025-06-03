@@ -8,12 +8,19 @@ pub struct Compiler {
     local_variables: HashMap<String, i32>,
     size_of_locals: u64,
     current_local_offset: u64,
-    //current_function_name: Option<String>,
+    label_counter: u64,
 }
 
 impl Compiler {
     pub fn new(code_elements: Vec<CodeElement>) -> Self {
-        Self { code_elements, casm_instructions: Vec::new(), local_variables: HashMap::new(), size_of_locals: 0, current_local_offset: 0 }
+        Self {
+            code_elements,
+            casm_instructions: Vec::new(),
+            local_variables: HashMap::new(),
+            size_of_locals: 0,
+            current_local_offset: 0,
+            label_counter: 0,
+        }
     }
 
     pub fn compile(&mut self) -> Vec<CasmInstruction> {
@@ -31,10 +38,9 @@ impl Compiler {
             op: Operand::Int(expr.token.unwrap().lexeme.parse::<u64>().unwrap()),
             incr_ap: true,
         });
-        return 1
+        return 1;
     }
 
-    
     fn compile_add(&mut self, expr: Expr) -> i32 {
         assert!(matches!(expr.expr_type, ExprType::Add));
         let left_offset = self.compile_expr(*expr.left.unwrap());
@@ -48,6 +54,7 @@ impl Compiler {
     }
 
     fn compile_sub(&mut self, expr: Expr) -> i32 {
+        assert!(matches!(expr.expr_type, ExprType::Sub));
         let left_offset = self.compile_expr(*expr.left.unwrap());
         let right_offset = self.compile_expr(*expr.right.unwrap());
         self.casm_instructions.push(CasmInstruction::Add {
@@ -59,6 +66,7 @@ impl Compiler {
     }
 
     fn compile_mul(&mut self, expr: Expr) -> i32 {
+        assert!(matches!(expr.expr_type, ExprType::Mul));
         let left_offset = self.compile_expr(*expr.left.unwrap());
         let right_offset = self.compile_expr(*expr.right.unwrap());
         self.casm_instructions.push(CasmInstruction::Mul {
@@ -70,13 +78,14 @@ impl Compiler {
     }
 
     fn compile_function_call(&mut self, expr: Expr) -> i32 {
+        assert!(matches!(expr.expr_type, ExprType::FunctionCall));
         let func_name = expr.ident.unwrap().token.lexeme;
         let mut arg_offsets = Vec::new();
         // evaluating each argument and storing the ap offset
         for arg in expr.paren_args {
             let arg_offset = match arg {
                 ExprAssignment::Expr(expr) => self.compile_expr(expr),
-                ExprAssignment::Assign(ident, expr) => todo!()
+                ExprAssignment::Assign(ident, expr) => todo!(),
             };
             arg_offsets.push(arg_offset);
         }
@@ -86,13 +95,12 @@ impl Compiler {
             let current = *arg_offset;
             *arg_offset = total;
             total += current;
-            
         }
         // Push args to stack
         for (i, arg_offset) in arg_offsets.iter().enumerate() {
             let instr = CasmInstruction::Set {
                 left: Operand::DerefAp(0),
-                op: Operand::DerefAp(-1- arg_offset - i as i32), // i accounts for the fact that pushing each argument further increases the ap offset
+                op: Operand::DerefAp(-1 - arg_offset - i as i32), // i accounts for the fact that pushing each argument further increases the ap offset
                 incr_ap: true,
             };
             self.casm_instructions.push(instr);
@@ -106,6 +114,7 @@ impl Compiler {
 
     // pushes local variable on stack and returns ap offset (ie 1)
     fn compile_identifier(&mut self, expr: Expr) -> i32 {
+        assert!(matches!(expr.expr_type, ExprType::Identifier));
         let ident = expr.ident.unwrap().token.lexeme;
         self.casm_instructions.push(CasmInstruction::Set {
             left: Operand::DerefAp(0),
@@ -132,8 +141,12 @@ impl Compiler {
         }
     }
 
-
-    pub fn compile_function(&mut self, name: Identifier, args: Vec<Identifier>, body: Vec<CodeElement>) {
+    pub fn compile_function(
+        &mut self,
+        name: Identifier,
+        args: Vec<Identifier>,
+        body: Vec<CodeElement>,
+    ) {
         self.local_variables.clear();
         self.size_of_locals = 0;
         self.current_local_offset = 0;
@@ -147,10 +160,14 @@ impl Compiler {
             }
         }
 
-        self.casm_instructions.push(CasmInstruction::Label(name.token.lexeme));
+        self.casm_instructions
+            .push(CasmInstruction::Label(name.token.lexeme));
 
         for (i, arg) in args.iter().enumerate() {
-            self.local_variables.insert(arg.token.lexeme.clone(), -(args.len() as i32 + 2) + i as i32);
+            self.local_variables.insert(
+                arg.token.lexeme.clone(),
+                -(args.len() as i32 + 2) + i as i32,
+            );
         }
         for code_element in body {
             self.compile_code_element(code_element);
@@ -158,14 +175,15 @@ impl Compiler {
     }
 
     fn compile_local_var(&mut self, ident: Identifier, expr: Option<Expr>) {
-        self.local_variables.insert(ident.token.lexeme, self.current_local_offset as i32);
+        self.local_variables
+            .insert(ident.token.lexeme, self.current_local_offset as i32);
         self.current_local_offset += 1;
-        
+
         match expr {
             Some(expr) => {
                 let _ = self.compile_expr(expr);
                 let instr = CasmInstruction::Set {
-                    left: Operand::DerefFp(self.current_local_offset as i32 -1),
+                    left: Operand::DerefFp(self.current_local_offset as i32 - 1),
                     op: Operand::DerefAp(-1),
                     incr_ap: false,
                 };
@@ -179,7 +197,7 @@ impl Compiler {
         // calculating return value
         // it is automatically at top of stack
         let _ = self.compile_expr(expr);
-        
+
         self.casm_instructions.push(CasmInstruction::Ret);
     }
 
@@ -188,42 +206,96 @@ impl Compiler {
         let value2 = self.compile_expr(expr2);
         let instr = CasmInstruction::Set {
             left: Operand::DerefAp(0),
-            op: Operand::DerefAp(- value2),
+            op: Operand::DerefAp(-value2),
             incr_ap: false,
         };
         self.casm_instructions.push(instr);
     }
 
     fn compile_if(&mut self, expr: Expr, body: Vec<CodeElement>, else_body: Vec<CodeElement>) {
-        assert!(matches!(expr.expr_type, ExprType::Neq));
-        let _ = self.compile_expr(Expr::new_binary(ExprType::Sub, *expr.left.unwrap(), *expr.right.unwrap()));
+        match expr.expr_type {
+            ExprType::Neq => {
+                let _ = self.compile_expr(Expr::new_binary(
+                    ExprType::Sub,
+                    *expr.left.unwrap(),
+                    *expr.right.unwrap(),
+                ));
+                self.casm_instructions.push(CasmInstruction::JmpIfNeq(
+                    format!("if{}", self.label_counter),
+                    Operand::DerefAp(-1),
+                ));
+                for code_element in else_body {
+                    self.compile_code_element(code_element);
+                }
+                self.casm_instructions
+                    .push(CasmInstruction::Jmp(format!("end{}", self.label_counter)));
+                self.casm_instructions
+                    .push(CasmInstruction::Label(format!("if{}", self.label_counter)));
+                for code_element in body {
+                    self.compile_code_element(code_element);
+                }
+                self.casm_instructions
+                    .push(CasmInstruction::Label(format!("end{}", self.label_counter)));
+                self.label_counter += 1;
+            }
+            ExprType::Eq => {
+                let _ = self.compile_expr(Expr::new_binary(
+                    ExprType::Sub,
+                    *expr.left.unwrap(),
+                    *expr.right.unwrap(),
+                ));
+                self.casm_instructions.push(CasmInstruction::JmpIfNeq(
+                    format!("else{}", self.label_counter),
+                    Operand::DerefAp(-1),
+                ));
+                for code_element in body {
+                    self.compile_code_element(code_element);
+                }
+                self.casm_instructions
+                    .push(CasmInstruction::Jmp(format!("end{}", self.label_counter)));
+                self.casm_instructions.push(CasmInstruction::Label(format!(
+                    "else{}",
+                    self.label_counter
+                )));
+                for code_element in else_body {
+                    self.compile_code_element(code_element);
+                }
+                self.casm_instructions
+                    .push(CasmInstruction::Label(format!("end{}", self.label_counter)));
+                self.label_counter += 1;
+            }
+            _ => panic!("Invalid expression type for if statement"),
+        }
+    }
 
-        let instr = CasmInstruction::JmpIfNeq(0, Operand::DerefAp(-1));
-        self.casm_instructions.push(instr);
-        // saving state
-        let instruction_number = self.casm_instructions.len() as i32;
-        // compiling else body
-        else_body.iter().for_each(|code_element| {
-            self.compile_code_element(code_element.clone());
-        });
-        let else_body_size = self.casm_instructions.len() as i32 - instruction_number;
-        // compiling else body
-        body.iter().for_each(|code_element| {
-            self.compile_code_element(code_element.clone());
-        });
-        // updating jump instruction
-        self.casm_instructions[instruction_number as usize - 1] = CasmInstruction::JmpIfNeq(else_body_size+1, Operand::DerefAp(-1));
+    fn compile_assert_equal(&mut self, expr1: Expr, expr2: Expr) {
+        if matches!(expr1.expr_type, ExprType::Identifier) {
+            let ident = expr1.ident.unwrap().token.lexeme;
+            let res = self.local_variables[&ident];
+            let _ = self.compile_expr(expr2);
+            self.casm_instructions.push(CasmInstruction::Set {
+                left: Operand::DerefFp(res),
+                op: Operand::DerefAp(-1),
+                incr_ap: false,
+            });
+        } else {
+            panic!("Can't assign to non-identifier");
+        }
     }
 
     fn compile_instruction(&mut self, instr: Instruction) {
         match instr.instruction_type {
             InstructionType::Ret => self.casm_instructions.push(CasmInstruction::Ret),
+            InstructionType::AssertEq => {
+                self.compile_assert_equal(instr.args[0].clone(), instr.args[1].clone())
+            }
             _ => todo!(),
         }
     }
 
     fn compile_alloc_locals(&mut self) {
-        self.casm_instructions.push(CasmInstruction::IncrAp(self.size_of_locals));
+        self.casm_instructions
+            .push(CasmInstruction::IncrAp(self.size_of_locals));
     }
 
     pub fn compile_code_element(&mut self, code_element: CodeElement) {
@@ -231,7 +303,9 @@ impl Compiler {
             CodeElement::LocalVar(ident, expr) => self.compile_local_var(ident, expr),
             CodeElement::Return(expr) => self.compile_return(expr),
             CodeElement::Function(name, args, body) => self.compile_function(name, args, body),
-            CodeElement::CompoundAssertEqual(expr1, expr2) => self.compile_compound_assert_equal(expr1, expr2),
+            CodeElement::CompoundAssertEqual(expr1, expr2) => {
+                self.compile_compound_assert_equal(expr1, expr2)
+            }
             CodeElement::If(expr, body, else_body) => self.compile_if(expr, body, else_body),
             CodeElement::Instruction(instr) => self.compile_instruction(instr),
             CodeElement::AllocLocals => self.compile_alloc_locals(),

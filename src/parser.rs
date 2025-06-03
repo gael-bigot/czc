@@ -1,13 +1,7 @@
-use std::any::Any;
-
 use crate::ast::*;
 use crate::lexer::Token;
 
-
-
-
-
-pub struct Parser{
+pub struct Parser {
     tokens: Vec<Token>,
     current: usize,
     source: String,
@@ -16,7 +10,12 @@ pub struct Parser{
 
 impl Parser {
     pub fn new(tokens: Vec<Token>, file_name: String, source: String) -> Self {
-        Self { tokens, current: 0, source, file_name }
+        Self {
+            tokens,
+            current: 0,
+            source,
+            file_name,
+        }
     }
 
     fn match_token(&mut self, token_type: crate::lexer::TokenType) -> bool {
@@ -51,16 +50,18 @@ impl Parser {
         self.tokens[self.current + 1].clone()
     }
 
-    fn previous(&mut self) -> crate::lexer::Token {
-        self.tokens[self.current - 1].clone()
-    }
-
     fn consume(&mut self, token_type: crate::lexer::TokenType, message: &str) -> Token {
         if self.check(token_type) {
             self.advance()
         } else {
             let span = self.peek().span;
-            crate::error::report_error(self.file_name.clone(), self.source.clone(), span, "Syntax error".to_string(), message.to_string());
+            crate::error::report_error(
+                self.file_name.clone(),
+                self.source.clone(),
+                span,
+                "Syntax error".to_string(),
+                message.to_string(),
+            );
             Token {
                 token_type: crate::lexer::TokenType::Error,
                 lexeme: "".to_string(),
@@ -88,7 +89,7 @@ impl Parser {
                 self.consume(crate::lexer::TokenType::Colon, "");
                 let type_ = self.type_();
                 Type::Named(ident, Box::new(type_))
-            } else{
+            } else {
                 self.pointer()
             }
         } else {
@@ -123,7 +124,6 @@ impl Parser {
         args
     }
 
-
     fn type_atom(&mut self) -> Type {
         let token = self.peek();
         match token.token_type {
@@ -141,12 +141,17 @@ impl Parser {
                 Type::Tuple(types)
             }
             _ => {
-                crate::error::report_error(self.file_name.clone(), self.source.clone(), self.peek().span, "Syntax error".to_string(), format!("Expected type, got {:?}", self.peek().lexeme));
+                crate::error::report_error(
+                    self.file_name.clone(),
+                    self.source.clone(),
+                    self.peek().span,
+                    "Syntax error".to_string(),
+                    format!("Expected type, got {:?}", self.peek().lexeme),
+                );
                 Type::Error
             }
         }
     }
-
 
     fn identifier(&mut self) -> Identifier {
         let token = self.consume(crate::lexer::TokenType::Identifier, "Expected identifier");
@@ -156,7 +161,6 @@ impl Parser {
     fn expression(&mut self) -> Expr {
         self.sum()
     }
-
 
     fn expr_assignment(&mut self) -> ExprAssignment {
         let expr = self.expression();
@@ -174,7 +178,6 @@ impl Parser {
         }
     }
 
-    
     fn arglist(&mut self) -> Vec<ExprAssignment> {
         let mut args = Vec::new();
         while !self.check(crate::lexer::TokenType::RParen) {
@@ -200,11 +203,12 @@ impl Parser {
         self.consume(crate::lexer::TokenType::RBrace, "Expected '}'");
         args
     }
-    
 
     fn sum(&mut self) -> Expr {
         let mut expr = self.product();
-        while self.check(crate::lexer::TokenType::Plus) || self.check(crate::lexer::TokenType::Minus) {
+        while self.check(crate::lexer::TokenType::Plus)
+            || self.check(crate::lexer::TokenType::Minus)
+        {
             let operator = self.advance();
             let right = self.product();
             match operator.token_type {
@@ -222,7 +226,9 @@ impl Parser {
 
     fn product(&mut self) -> Expr {
         let mut expr = self.unary();
-        while self.check(crate::lexer::TokenType::Star) || self.check(crate::lexer::TokenType::Slash) {
+        while self.check(crate::lexer::TokenType::Star)
+            || self.check(crate::lexer::TokenType::Slash)
+        {
             let operator = self.advance();
             let right = self.expression();
             match operator.token_type {
@@ -280,7 +286,6 @@ impl Parser {
         expr
     }
 
-
     fn bool_atom(&mut self) -> Expr {
         let expr = self.atom();
         let op = self.peek();
@@ -299,7 +304,6 @@ impl Parser {
         }
     }
 
-
     fn atom(&mut self) -> Expr {
         let token = self.peek();
         if self.check(crate::lexer::TokenType::LParen) {
@@ -310,18 +314,16 @@ impl Parser {
                     ExprAssignment::Expr(expr) => {
                         return expr;
                     }
-                    _ => {},
+                    _ => {}
                 }
             }
             Expr::new_tuple_or_paren(args)
         } else {
             self.advance();
             match token.token_type {
-                crate::lexer::TokenType::Int => {
-                    Expr::new_terminal(ExprType::IntegerLiteral, token)
-                }
+                crate::lexer::TokenType::Int => Expr::new_terminal(ExprType::IntegerLiteral, token),
                 crate::lexer::TokenType::Identifier => {
-                    if self.check(crate::lexer::TokenType::LBrace){
+                    if self.check(crate::lexer::TokenType::LBrace) {
                         let brace_args = self.brace_arglist();
                         let paren_args = self.paren_arglist();
                         Expr::new_function_call(Identifier { token }, paren_args, brace_args)
@@ -331,7 +333,10 @@ impl Parser {
                     } else if self.check(crate::lexer::TokenType::LBracket) {
                         self.advance();
                         let expr = self.expression();
-                        self.consume(crate::lexer::TokenType::RBracket, "Expected ']' after expression");
+                        self.consume(
+                            crate::lexer::TokenType::RBracket,
+                            "Expected ']' after expression",
+                        );
                         Expr::new_unary(ExprType::Subscript, expr)
                     } else {
                         Expr::new_identifier(Identifier { token })
@@ -344,7 +349,10 @@ impl Parser {
                     Expr::new_terminal(ExprType::IntegerLiteral, token)
                 }
                 crate::lexer::TokenType::NonDet => {
-                    let hint = self.consume(crate::lexer::TokenType::NonDet, "Expected hint after nondet");
+                    let hint = self.consume(
+                        crate::lexer::TokenType::NonDet,
+                        "Expected hint after nondet",
+                    );
                     Expr::new_terminal(ExprType::Hint, hint)
                 }
                 crate::lexer::TokenType::Ap | crate::lexer::TokenType::Fp => {
@@ -352,7 +360,10 @@ impl Parser {
                 }
                 crate::lexer::TokenType::LBracket => {
                     let expr = self.expression();
-                    self.consume(crate::lexer::TokenType::RBracket, "Expected ']' after dereferencing");
+                    self.consume(
+                        crate::lexer::TokenType::RBracket,
+                        "Expected ']' after dereferencing",
+                    );
                     Expr::new_unary(ExprType::Deref, expr)
                 }
 
@@ -366,7 +377,13 @@ impl Parser {
                     Expr::new_cast(type_, expr)
                 }
                 _ => {
-                    crate::error::report_error(self.file_name.clone(), self.source.clone(), token.span, "Syntax error".to_string(), format!("Expected expression, got {:?}", token.lexeme));
+                    crate::error::report_error(
+                        self.file_name.clone(),
+                        self.source.clone(),
+                        token.span,
+                        "Syntax error".to_string(),
+                        format!("Expected expression, got {:?}", token.lexeme),
+                    );
                     Expr::new_error()
                 }
             }
@@ -377,7 +394,8 @@ impl Parser {
         let old_current = self.current;
         if self.match_token(crate::lexer::TokenType::Comma)
             && self.match_token(crate::lexer::TokenType::Ap)
-            && self.match_token(crate::lexer::TokenType::PlusPlus) {
+            && self.match_token(crate::lexer::TokenType::PlusPlus)
+        {
             true
         } else {
             self.current = old_current;
@@ -388,11 +406,23 @@ impl Parser {
     fn instruction(&mut self) -> Instruction {
         if self.match_token(crate::lexer::TokenType::Call) {
             if self.match_token(crate::lexer::TokenType::Rel) {
-                Instruction::new_unary(InstructionType::CallRel, self.expression(), self.does_increment_ap())
+                Instruction::new_unary(
+                    InstructionType::CallRel,
+                    self.expression(),
+                    self.does_increment_ap(),
+                )
             } else if self.match_token(crate::lexer::TokenType::Abs) {
-                Instruction::new_unary(InstructionType::CallAbs, self.expression(), self.does_increment_ap())
+                Instruction::new_unary(
+                    InstructionType::CallAbs,
+                    self.expression(),
+                    self.does_increment_ap(),
+                )
             } else {
-                Instruction::new_call(InstructionType::Call, self.identifier(), self.does_increment_ap())
+                Instruction::new_call(
+                    InstructionType::Call,
+                    self.identifier(),
+                    self.does_increment_ap(),
+                )
             }
         } else if self.match_token(crate::lexer::TokenType::Jmp) {
             if self.match_token(crate::lexer::TokenType::Rel) {
@@ -400,41 +430,67 @@ impl Parser {
                 if self.match_token(crate::lexer::TokenType::If) {
                     let condition = self.expression();
                     // jump rel if
-                    Instruction::new_binary(InstructionType::Jnz, expr, condition, self.does_increment_ap())
+                    Instruction::new_binary(
+                        InstructionType::Jnz,
+                        expr,
+                        condition,
+                        self.does_increment_ap(),
+                    )
                 } else {
                     // jump rel
                     Instruction::new_unary(InstructionType::JmpRel, expr, self.does_increment_ap())
                 }
             } else if self.match_token(crate::lexer::TokenType::Abs) {
                 let expr = self.expression();
-                // jump abs 
+                // jump abs
                 Instruction::new_unary(InstructionType::JmpAbs, expr, self.does_increment_ap())
             } else {
                 let ident = self.identifier();
                 if self.match_token(crate::lexer::TokenType::If) {
                     let condition = self.expression();
                     // jump if
-                    Instruction::new_jmp_label_if(InstructionType::JnzLabel, ident, condition, self.does_increment_ap())
+                    Instruction::new_jmp_label_if(
+                        InstructionType::JnzLabel,
+                        ident,
+                        condition,
+                        self.does_increment_ap(),
+                    )
                 } else {
                     // jump
-                    Instruction::new_jmp_label(InstructionType::Jmp, ident, self.does_increment_ap())
+                    Instruction::new_jmp_label(
+                        InstructionType::Jmp,
+                        ident,
+                        self.does_increment_ap(),
+                    )
                 }
             }
         } else if self.match_token(crate::lexer::TokenType::Ret) {
             Instruction::new_ret(self.does_increment_ap())
         } else if self.match_token(crate::lexer::TokenType::Ap) {
             self.consume(crate::lexer::TokenType::PlusEq, "Expected '+=' after ap");
-            Instruction::new_unary(InstructionType::AddAp, self.expression(), self.does_increment_ap())
+            Instruction::new_unary(
+                InstructionType::AddAp,
+                self.expression(),
+                self.does_increment_ap(),
+            )
         } else if self.match_token(crate::lexer::TokenType::Dw) {
-            Instruction::new_unary(InstructionType::DataWord, self.expression(), self.does_increment_ap())
+            Instruction::new_unary(
+                InstructionType::DataWord,
+                self.expression(),
+                self.does_increment_ap(),
+            )
         } else {
             let left = self.expression();
             self.consume(crate::lexer::TokenType::Equal, "Expected '=' in assertion");
             let right = self.expression();
-            Instruction::new_binary(InstructionType::AssertEq, left, right, self.does_increment_ap())
+            Instruction::new_binary(
+                InstructionType::AssertEq,
+                left,
+                right,
+                self.does_increment_ap(),
+            )
         }
     }
-
 
     fn identifier_list_paren(&mut self) -> Vec<Identifier> {
         let mut identifiers = Vec::new();
@@ -449,7 +505,6 @@ impl Parser {
         self.consume(crate::lexer::TokenType::RParen, "Expected ')'");
         identifiers
     }
-    
 
     fn code_element(&mut self) -> CodeElement {
         let token = self.peek();
@@ -481,15 +536,21 @@ impl Parser {
             crate::lexer::TokenType::Func => {
                 self.advance();
                 let ident = self.identifier();
-                //self.consume(crate::lexer::TokenType::LParen, "Expected '(' after function");
+
                 let args = self.identifier_list_paren();
-                // self.consume(crate::lexer::TokenType::RParen, "Expected ')' after function");
-                self.consume(crate::lexer::TokenType::LBrace, "Expected '{' after function");
+
+                self.consume(
+                    crate::lexer::TokenType::LBrace,
+                    "Expected '{' after function",
+                );
                 let mut body = Vec::new();
                 while !self.check(crate::lexer::TokenType::RBrace) {
                     body.push(self.code_element());
                 }
-                self.consume(crate::lexer::TokenType::RBrace, "Expected '}' after function");
+                self.consume(
+                    crate::lexer::TokenType::RBrace,
+                    "Expected '}' after function",
+                );
                 CodeElement::Function(ident, args, body)
             }
 
@@ -498,13 +559,18 @@ impl Parser {
                 let ident = self.identifier();
                 if self.match_token(crate::lexer::TokenType::Equal) {
                     let expr = self.expression();
-                    self.consume(crate::lexer::TokenType::Semicolon, "Expected ';' after local");
+                    self.consume(
+                        crate::lexer::TokenType::Semicolon,
+                        "Expected ';' after local",
+                    );
                     CodeElement::LocalVar(ident, Some(expr))
                 } else {
-                    self.consume(crate::lexer::TokenType::Semicolon, "Expected ';' after local");
+                    self.consume(
+                        crate::lexer::TokenType::Semicolon,
+                        "Expected ';' after local",
+                    );
                     CodeElement::LocalVar(ident, None)
                 }
-                
             }
 
             crate::lexer::TokenType::Assert => {
@@ -512,30 +578,40 @@ impl Parser {
                 let left = self.expression();
                 self.consume(crate::lexer::TokenType::Equal, "Expected '=' after assert");
                 let right = self.expression();
-                self.consume(crate::lexer::TokenType::Semicolon, "Expected ';' after static assert");
+                self.consume(
+                    crate::lexer::TokenType::Semicolon,
+                    "Expected ';' after static assert",
+                );
                 CodeElement::CompoundAssertEqual(left, right)
             }
-            
+
             crate::lexer::TokenType::Return => {
                 self.advance();
                 let expr = self.expression();
-                self.consume(crate::lexer::TokenType::Semicolon, "Expected ';' after return");
+                self.consume(
+                    crate::lexer::TokenType::Semicolon,
+                    "Expected ';' after return",
+                );
                 CodeElement::Return(expr)
             }
 
             crate::lexer::TokenType::AllocLocals => {
                 self.advance();
-                self.consume(crate::lexer::TokenType::Semicolon, "Expected ';' after alloc_locals");
+                self.consume(
+                    crate::lexer::TokenType::Semicolon,
+                    "Expected ';' after alloc_locals",
+                );
                 CodeElement::AllocLocals
             }
 
             _ => {
                 let instr = self.instruction();
-                self.consume(crate::lexer::TokenType::Semicolon, "Expected ';' after instruction");
+                self.consume(
+                    crate::lexer::TokenType::Semicolon,
+                    "Expected ';' after instruction",
+                );
                 CodeElement::Instruction(instr)
             }
         }
-
     }
-
 }
